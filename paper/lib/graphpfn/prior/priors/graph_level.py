@@ -240,4 +240,8 @@ def sample_dataset(config: GraphLevelPriorConfig) -> PriorDataset:
         "task_type": TaskType.REGRESSION,
         "labeled_mask": is_virtual,
         "feature_fit_mask": ~is_virtual,
+        # Labels are already standardized above (over all virtual nodes,
+        # context+query) -- the eval path must not re-standardize on just
+        # the (possibly single-node) train subset. See prior_typings.py.
+        "labels_standardized": True,
     }

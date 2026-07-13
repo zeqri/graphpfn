@@ -102,4 +102,5 @@ def sample_dataset(config: AttributesThenGraphPriorConfig) -> PriorDataset:
         "task_type": task_type,
         "labeled_mask": torch.ones(features.shape[0], dtype=torch.bool),
         "feature_fit_mask": fit_mask,
+        "labels_standardized": False,
     }

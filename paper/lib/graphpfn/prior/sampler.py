@@ -92,6 +92,7 @@ def _pad_and_batch(datasets: list[PriorDataset]) -> PriorDatasetBatch:
 
     task_type = datasets[0]["task_type"]
     n_train_nodes = datasets[0]["n_train_nodes"]
+    labels_standardized = datasets[0]["labels_standardized"]
 
     for i, d in enumerate(datasets):
         n, f = d["features"].shape
@@ -104,6 +105,7 @@ def _pad_and_batch(datasets: list[PriorDataset]) -> PriorDatasetBatch:
 
         assert d["n_train_nodes"] == n_train_nodes
         assert d["task_type"] == task_type
+        assert d["labels_standardized"] == labels_standardized
 
     return PriorDatasetBatch(
         features=features,
@@ -116,6 +118,7 @@ def _pad_and_batch(datasets: list[PriorDataset]) -> PriorDatasetBatch:
         task_type=task_type,
         labeled_mask=labeled_mask,
         feature_fit_mask=feature_fit_mask,
+        labels_standardized=labels_standardized,
     )
 
 
@@ -317,6 +320,7 @@ class GraphPriorSamplerDDP:
             max_edges = global_batch["edges"].shape[-1]
             n_train_nodes = global_batch["n_train_nodes"]
             task_type_code = TASK_TYPE_CODES[global_batch["task_type"]]
+            labels_standardized_code = int(global_batch["labels_standardized"])
             metadata = torch.tensor(
                 [
                     global_batch_size,
@@ -325,6 +329,7 @@ class GraphPriorSamplerDDP:
                     max_edges,
                     n_train_nodes,
                     task_type_code,
+                    labels_standardized_code,
                 ],
                 dtype=torch.int64,
                 device=device,
@@ -392,7 +397,7 @@ class GraphPriorSamplerDDP:
             torch.distributed.scatter(feature_fit_mask, list(feature_fit_mask_list), src=0)  # type: ignore
         else:
             # >>> Step 1: metadata
-            metadata = torch.tensor([0] * 6, dtype=torch.int64, device=device)
+            metadata = torch.tensor([0] * 7, dtype=torch.int64, device=device)
             torch.distributed.broadcast(metadata, src=0)  # type: ignore
             (
                 global_batch_size,
@@ -401,6 +406,7 @@ class GraphPriorSamplerDDP:
                 max_edges,
                 n_train_nodes,
                 task_type_code,
+                labels_standardized_code,
             ) = metadata.cpu().tolist()
             # >>> Step 2: allocate
             features = torch.empty(
@@ -465,6 +471,7 @@ class GraphPriorSamplerDDP:
             "task_type": TASK_TYPE_CODES_INV[task_type_code],
             "labeled_mask": labeled_mask,
             "feature_fit_mask": feature_fit_mask,
+            "labels_standardized": bool(labels_standardized_code),
         }
 
         if self.verbose and self.prior is not None:

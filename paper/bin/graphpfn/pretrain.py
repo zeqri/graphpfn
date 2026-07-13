@@ -72,14 +72,34 @@ def evaluate_dataset(
     assert dataset.task.is_transductive
     prediction_type = "labels" if dataset.task.is_regression else "probs"
 
-    regression_label_stats = lib.graph.data.prepare_labels(dataset, True)
+    # Skip re-standardization for priors that already standardize labels at
+    # generation time (currently only graph_level, which fits mean/std once
+    # over the whole population of virtual nodes -- context+query
+    # together). Re-fitting mean/std here on just the train/context subset
+    # would be redundant at best and, for a tiny context (as few as a
+    # single node, which the graph_level config allows), divide by a
+    # (near-)zero std. Node-level priors and real on-disk datasets are
+    # unaffected: labels_standardized defaults to False/absent for them, so
+    # this is exactly the previous behavior there.
+    already_standardized = dataset.data.get("labels_standardized", False)
+    regression_label_stats = lib.graph.data.prepare_labels(
+        dataset, not already_standardized
+    )
 
     dataset = dataset.to_torch(device)
     features = lib.graph.data.flatten_features(dataset.features)
     assert features is not None
+    # feature_fit_mask defaults to the train mask (node-level priors / real
+    # datasets, where context/train rows carry real features). The
+    # graph_level prior overrides it to atom nodes only: its train rows are
+    # all-zero virtual placeholders, which would otherwise make every
+    # column look constant and get dropped entirely.
+    feature_fit_mask = dataset.data.get("feature_fit_mask")
+    if feature_fit_mask is None:
+        feature_fit_mask = dataset.data["masks"]["train"]
     features = lib.graph.data.drop_constant_features(
         features,
-        dataset.data["masks"]["train"],  # type: ignore
+        feature_fit_mask,  # type: ignore
     )
     y_train = dataset.data["labels"][dataset.data["masks"]["train"]].to(  # type: ignore
         dtype=torch.float32, device=device
@@ -115,6 +135,12 @@ def evaluate_dataset(
             k: pred_transform(torch.from_numpy(v).to(device)).cpu().numpy()  # pyright: ignore
             for k, v in predictions.items()
         }
+    elif dataset.task.is_regression:
+        # already_standardized: labels were never re-standardized above, so
+        # predictions are already on the same scale as dataset.task.labels
+        # -- no transform needed (regression_label_stats is None here for a
+        # reason unrelated to classification, unlike the branch below).
+        pass
     else:
         predictions = {
             k: scipy.special.softmax(

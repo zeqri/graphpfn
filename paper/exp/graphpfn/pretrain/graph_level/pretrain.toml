@@ -11,11 +11,18 @@
 ##    its own real nodes are trivially always-positive, so the existing
 ##    global edge sampler isn't a meaningful signal here without further
 ##    changes to restrict it to real (atom-atom) edges only.
-##  - No periodic evaluation: `evaluation_data` is empty/zero below, since the
-##    real-data and synthetic-eval paths (`evaluate_dataset`,
-##    `get_synthetic_eval_dataset` / `convert_to_graph_dataset`) assume the
-##    node-level, single-graph convention and haven't been adapted for the
-##    virtual-node/multi-graph layout yet.
+##  - Real-data evaluation stays empty (`evaluation_data.real = []`): the
+##    GraphLand datasets it would reference aren't present in this
+##    environment, and they're all node-level anyway. Periodic synthetic
+##    eval IS wired up: `unbatch_prior_dataset`/`convert_to_graph_dataset`
+##    (lib/graphpfn/prior/util.py) are now labeled_mask-aware, so "test"
+##    only ever contains query virtual nodes (never atoms), and
+##    `evaluate_dataset` (bin/graphpfn/pretrain.py) fits drop-constant-
+##    feature stats on `feature_fit_mask` (atoms) instead of the train mask
+##    (context virtual rows, which are all-zero placeholders and would
+##    otherwise make every column look constant). See
+##    bin/graphpfn/graph_level_eval_smoke_test.py for a CPU-only regression
+##    test of this path.
 
 function = "bin.graphpfn.pretrain.main"
 
@@ -34,7 +41,7 @@ lr = 0.001
 weight_decay = 0.1
 
 [base_config.evaluation_data]
-n_synthetic_per_gpu = 0
+n_synthetic_per_gpu = 8
 real = []
 
 [base_config.prior.sanity_check]

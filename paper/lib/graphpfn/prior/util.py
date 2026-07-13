@@ -27,6 +27,9 @@ def unbatch_prior_dataset(batch: PriorDatasetBatch) -> list[PriorDataset]:
                 edges=batch["edges"][i, :, :e],
                 n_train_nodes=batch["n_train_nodes"],
                 task_type=batch["task_type"],
+                labeled_mask=batch["labeled_mask"][i, :n],
+                feature_fit_mask=batch["feature_fit_mask"][i, :n],
+                labels_standardized=batch["labels_standardized"],
             )
         )
     return datasets
@@ -41,12 +44,17 @@ def convert_to_graph_dataset(
     n_nodes = dataset["features"].shape[0]
     n_train = dataset["n_train_nodes"]
     task_type = dataset["task_type"]
+    labeled_mask = dataset["labeled_mask"].numpy()
 
-    # >>> Build masks
+    # >>> Build masks. "test" is additionally restricted to labeled_mask so
+    # that non-labeled nodes (e.g. atoms in the graph_level prior) are never
+    # scored as if they were real query examples -- for the node-level
+    # priors labeled_mask is all-True, so this is a no-op there.
+    node_idx = np.arange(n_nodes)
     masks: dict[PartKey, np.ndarray] = {
-        "train": np.arange(n_nodes) < n_train,
+        "train": node_idx < n_train,
         "val": np.zeros(n_nodes, dtype=bool),
-        "test": np.arange(n_nodes) >= n_train,
+        "test": (node_idx >= n_train) & labeled_mask,
     }
 
     # >>> Build graph
@@ -59,6 +67,7 @@ def convert_to_graph_dataset(
 
     labels = dataset["labels"].numpy().astype(np.float32)
     features = dataset["features"].numpy().astype(np.float32)
+    feature_fit_mask = dataset["feature_fit_mask"].numpy()
 
     data = GraphData(
         name=name,
@@ -68,6 +77,8 @@ def convert_to_graph_dataset(
         num_features=features,
         cat_features=None,
         frac_features=None,
+        feature_fit_mask=feature_fit_mask,
+        labels_standardized=dataset["labels_standardized"],
     )
     task = GraphTask(
         labels=labels,

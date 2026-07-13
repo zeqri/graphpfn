@@ -58,6 +58,20 @@ class GraphData(TypedDict):
     num_features: None | np.ndarray
     cat_features: None | np.ndarray
     frac_features: None | np.ndarray
+    # Which nodes' features are representative enough to fit per-column
+    # statistics on (e.g. drop-constant detection). Only set by
+    # `lib.graphpfn.prior.util.convert_to_graph_dataset`, where it defaults
+    # to the train mask for node-level priors but excludes placeholder
+    # virtual-node rows for the graph_level prior. Absent (falls back to
+    # masks["train"]) for real, on-disk datasets.
+    feature_fit_mask: NotRequired[None | np.ndarray]
+    # Whether labels were already standardized (mean 0, std 1 over the whole
+    # labeled population) at generation time. Only set by
+    # `lib.graphpfn.prior.util.convert_to_graph_dataset` -- True for the
+    # graph_level prior, False for node-level priors, absent (defaults to
+    # False) for real, on-disk datasets. `evaluate_dataset` uses this to
+    # skip its own label re-standardization when it would be redundant.
+    labels_standardized: NotRequired[bool]
 
 
 GRAPH_FEATURE_KEYS = [f"{key}_features" for key in ["num", "frac", "cat"]]

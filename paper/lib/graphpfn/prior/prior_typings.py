@@ -393,6 +393,14 @@ class PriorDataset(TypedDict):
     # its train (context virtual-node) rows are all-zero placeholders and
     # would otherwise make every feature column look constant/zero-variance.
     feature_fit_mask: torch.Tensor
+    # Whether labels were already standardized at generation time (mean 0,
+    # std 1 over the whole labeled population). False for the node-level
+    # priors, which emit raw SCM labels. True for the graph_level prior,
+    # which standardizes once over all virtual nodes (context+query). Lets
+    # the eval path (evaluate_dataset) skip its own re-standardization for
+    # graph_level -- refitting mean/std on just a (possibly single-node)
+    # train subset there would be redundant and can divide by ~zero std.
+    labels_standardized: bool
 
 
 class PriorDatasetBatch(TypedDict):
@@ -406,3 +414,4 @@ class PriorDatasetBatch(TypedDict):
     task_type: TaskType
     labeled_mask: torch.Tensor
     feature_fit_mask: torch.Tensor
+    labels_standardized: bool
