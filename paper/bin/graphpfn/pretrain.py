@@ -1,3 +1,4 @@
+import json
 import math
 import warnings
 from collections.abc import Callable
@@ -334,10 +335,15 @@ def main(
 
     graphpfn_without_ddp = graphpfn
     if lib.is_ddp():
+        # device_ids/output_device must be the LOCAL cuda device index (0..
+        # gpus_per_node-1, matching `device` above), not the global DDP rank
+        # -- with multiple GPUs per node, global rank exceeds the number of
+        # GPUs visible to this process once rank >= gpus_per_node, causing
+        # an out-of-range CUDA stream lookup inside DDP's forward.
         graphpfn = DistributedDataParallel(
             graphpfn,
-            device_ids=[rank],
-            output_device=rank,
+            device_ids=[device],
+            output_device=device,
             find_unused_parameters=True,
         )
 
@@ -429,6 +435,13 @@ def main(
             }
             logger.info(f"{info=}")
             tracker.log(info, step=checkpoint["step"])
+            # checkpoint.pt/report.json only ever hold the latest epoch's
+            # numbers (overwritten every save), so append a durable,
+            # greppable/plottable history here instead -- the internal
+            # experiment tracker (dev.infra) isn't available in this
+            # environment, so tracker.log above is otherwise a no-op.
+            with open(output / "training_log.jsonl", "a") as f:
+                f.write(json.dumps({"step": checkpoint["step"], **info}) + "\n")
             lib.dump_checkpoint(output, checkpoint)
             backup(output)
         lib.barrier()
@@ -488,13 +501,25 @@ def main(
         )
         features = batch["features"][0, :n_nodes, :n_features].to(device)
         labels = batch["labels"][0, :n_nodes].to(device)
+        labeled_mask = batch["labeled_mask"][0, :n_nodes].to(device)
+        feature_fit_mask = batch["feature_fit_mask"][0, :n_nodes].to(device)
 
         train_mask = torch.zeros(n_nodes, dtype=torch.bool, device=device)
         train_mask[:n_train_nodes] = True
         y_train = labels[train_mask].to(dtype=torch.float32)
+        # Non-labeled nodes (e.g. atoms in the graph_level prior) get a
+        # forward pass but never a loss term: query is "not context AND
+        # eligible to be labeled", not simply "not context". For node-level
+        # priors labeled_mask is all-True, so this is exactly ~train_mask.
+        query_mask = labeled_mask & ~train_mask
 
-        features_mean = features[train_mask].mean(-2)
-        features_std = features[train_mask].std(-2)
+        # Fit stats on feature_fit_mask, not train_mask: for the graph_level
+        # prior, train (context virtual) rows are all-zero placeholders, so
+        # fitting on them would divide by a zero std. feature_fit_mask picks
+        # out the representative (real/atom) rows instead; for node-level
+        # priors it's just train_mask, so this is unchanged behavior there.
+        features_mean = features[feature_fit_mask].mean(-2)
+        features_std = features[feature_fit_mask].std(-2)
         features = (features - features_mean) / features_std
 
         # >>> Masking for SSL
@@ -572,19 +597,19 @@ def main(
             )
 
         pred = out["predictions"]
-        pred = pred[~train_mask].unsqueeze(0)
+        pred = pred[query_mask].unsqueeze(0)
 
         is_classification = task_type in [TaskType.BINCLASS, TaskType.MULTICLASS]
         if is_classification:
             sup_loss = F.cross_entropy(
                 pred.permute(0, 2, 1),
-                labels[~train_mask].unsqueeze(0).long(),
+                labels[query_mask].unsqueeze(0).long(),
             )
         else:
             loss_fn = F.mse_loss
             sup_loss = loss_fn(
                 pred,
-                labels[~train_mask].unsqueeze(0),
+                labels[query_mask].unsqueeze(0),
             ).mean()
 
         loss = sup_loss

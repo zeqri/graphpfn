@@ -51,10 +51,15 @@ def sample_dataset(config: GraphThenAttributesPriorConfig) -> PriorDataset:
         labels, config["task"], config["postprocessing"]["permute_labels"]
     )
 
+    fit_mask = torch.zeros(features.shape[0], dtype=torch.bool)
+    fit_mask[:n_train_nodes] = True
+
     return {
         "features": features,
         "labels": labels,
         "edges": edges,
         "n_train_nodes": n_train_nodes,
         "task_type": task_type,
+        "labeled_mask": torch.ones(features.shape[0], dtype=torch.bool),
+        "feature_fit_mask": fit_mask,
     }

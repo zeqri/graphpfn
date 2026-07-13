@@ -1,3 +1,4 @@
+import os
 from typing import Any
 
 import torch
@@ -75,11 +76,14 @@ _MaskEmbEncoder.forward = lambda self, input: _orig_mask_emb_encoder_forward(
 
 
 def _download_limix_checkpoint() -> str:
+    # GRAPHPFN_CHECKPOINT_DIR makes the location cwd-independent; the default
+    # preserves the original relative-path behavior.
+    checkpoint_dir = os.environ.get("GRAPHPFN_CHECKPOINT_DIR", "./checkpoints")
     return hf_hub_download(
         repo_id="stableai-org/LimiX-16M",
         filename="LimiX-16M.ckpt",
-        local_dir="./checkpoints",
-        cache_dir="./checkpoints",
+        local_dir=checkpoint_dir,
+        cache_dir=checkpoint_dir,
     )
 
 

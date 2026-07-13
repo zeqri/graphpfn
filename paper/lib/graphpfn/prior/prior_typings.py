@@ -319,7 +319,48 @@ class AttributesThenGraphPriorConfig(TypedDict):
     train_ratio: float
 
 
-PriorConfig = GraphThenAttributesPriorConfig | AttributesThenGraphPriorConfig
+class SmallGraphStructureConfig(TypedDict):
+    """Bounds for one small graph's structure, resampled independently by
+    `graph_level.py` for each of the `n_graphs` graphs in one dataset (unlike
+    `GraphConfig` above, whose fields are resolved once per whole dataset).
+    """
+
+    min_nodes: int
+    max_nodes: int
+    avg_degree_min: float
+    avg_degree_max: float
+    n_groups_min: int
+    n_groups_max: int
+    offdiagonal_coef: float
+
+
+class GraphLevelPriorConfig(TypedDict):
+    """Many small graphs, one virtual (readout) node each, disjoint-unioned.
+
+    Only virtual nodes ever carry a label; real nodes are structural-only.
+    Each of the `n_graphs` small graphs gets its own independently sampled
+    size/degree (from `graph`'s bounds), subject to `total_n_nodes_budget`
+    (see graph_level.py), mirroring how `graph.n_nodes` bounds the single
+    graph in the node-level priors above. The SCM itself is instantiated
+    once for the whole dataset (shared "task" across all graphs), matching
+    how one graph's many nodes share one SCM in the node-level priors.
+    `train_ratio` is applied to the graph population (not the node
+    population): it picks what fraction of virtual nodes are context.
+    """
+
+    _type_: Literal["graph_level"]
+    total_n_nodes_budget: int
+    n_graphs: int
+    graph: SmallGraphStructureConfig
+    scm: GNNSCMConfig
+    postprocessing: PostprocessingConfig
+    train_ratio: float
+    label_aggregation: Literal["mean", "sum", "max", "min"]
+
+
+PriorConfig = (
+    GraphThenAttributesPriorConfig | AttributesThenGraphPriorConfig | GraphLevelPriorConfig
+)
 
 
 class SanityCheckConfig(TypedDict):
@@ -341,6 +382,17 @@ class PriorDataset(TypedDict):
     edges: torch.Tensor
     n_train_nodes: int
     task_type: TaskType
+    # True for nodes eligible to ever be context/query (train or test); False
+    # for structural-only nodes (e.g. the real/atom nodes in the graph_level
+    # prior) that get a forward pass but never contribute a label or a loss
+    # term. Node-level priors mark every node True (unchanged behavior).
+    labeled_mask: torch.Tensor
+    # Which nodes' features are representative enough to fit normalization
+    # stats on. Node-level priors reuse train=[0, n_train_nodes) (unchanged
+    # behavior). The graph_level prior instead marks real/atom nodes, since
+    # its train (context virtual-node) rows are all-zero placeholders and
+    # would otherwise make every feature column look constant/zero-variance.
+    feature_fit_mask: torch.Tensor
 
 
 class PriorDatasetBatch(TypedDict):
@@ -352,3 +404,5 @@ class PriorDatasetBatch(TypedDict):
     n_edges: torch.Tensor
     n_train_nodes: int
     task_type: TaskType
+    labeled_mask: torch.Tensor
+    feature_fit_mask: torch.Tensor

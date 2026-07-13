@@ -91,10 +91,15 @@ def sample_dataset(config: AttributesThenGraphPriorConfig) -> PriorDataset:
     _, col_mask = drop_constant_features(train_features)
     features = features[:, col_mask]
 
+    fit_mask = torch.zeros(features.shape[0], dtype=torch.bool)
+    fit_mask[:n_train_nodes] = True
+
     return {
         "features": features,
         "labels": labels,
         "edges": edges,
         "n_train_nodes": n_train_nodes,
         "task_type": task_type,
+        "labeled_mask": torch.ones(features.shape[0], dtype=torch.bool),
+        "feature_fit_mask": fit_mask,
     }

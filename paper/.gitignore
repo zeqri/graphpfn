@@ -6,6 +6,8 @@ __pycache__/
 
 # C extensions
 *.so
+/p/project1/profound/al-zeqri1/PFN/graphpfn/exp/
+.vscode/    
 
 # Distribution / packaging
 .Python
@@ -78,7 +80,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
-
+tests/
 # IPython
 profile_default/
 ipython_config.py

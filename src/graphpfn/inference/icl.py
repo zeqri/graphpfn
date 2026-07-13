@@ -18,17 +18,31 @@ def predict_icl(
     *,
     model_kwargs: KWArgs = {},
     preprocessing_kwargs: KWArgs = {},
+    feature_fit_mask: np.ndarray | None = None,
     amp: bool = True,
     device: str | torch.device,
 ) -> np.ndarray:
+    """
+    Args:
+        feature_fit_mask: Boolean mask over nodes used to fit feature
+            normalizers/drop constant columns (see `prepare_features_tensor`).
+            Defaults to `dataset.masks["train"]`, which is appropriate when
+            train nodes are representative of the overall feature
+            distribution (the usual transductive node-level setting). Pass an
+            explicit mask when that assumption doesn't hold, e.g. when train
+            rows are placeholder/virtual nodes without real features.
+    """
     device = torch.device(device)
 
     # >>> Data
 
+    if feature_fit_mask is None:
+        feature_fit_mask = dataset.masks["train"]
+
     graph = prepare_graph(dataset.graph).to(device)
     features = prepare_features_tensor(
         dataset.features,
-        dataset.masks["train"],
+        feature_fit_mask,
         **preprocessing_kwargs,
     ).to(device)
     train_mask = torch.tensor(dataset.masks["train"]).to(device)

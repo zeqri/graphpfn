@@ -37,9 +37,14 @@ def _sample_dataset_with_retry(
     max_retries: int = 3,
 ) -> PriorDataset:
     min_features = config["sanity_check"]["min_features"]
-    task_config = config["prior"]["task"]
+    # The graph_level prior has no `task` sub-config (it's regression-only,
+    # hardcoded in graph_level.py) -- n_classes only matters for multiclass
+    # sanity checks, so it's simply None when there's no task config at all.
+    task_config = config["prior"].get("task")
     n_classes = (
-        task_config["n_classes"] if task_config["_type_"] == "multiclass" else None
+        task_config["n_classes"]
+        if task_config is not None and task_config["_type_"] == "multiclass"
+        else None
     )
 
     for attempt in range(max_retries):
@@ -82,6 +87,8 @@ def _pad_and_batch(datasets: list[PriorDataset]) -> PriorDatasetBatch:
     features = torch.zeros(batch_size, max_nodes, max_features, dtype=torch.float32)
     labels = torch.zeros(batch_size, max_nodes, dtype=torch.float32)
     edges = torch.zeros(batch_size, 2, max_edges, dtype=torch.int64)
+    labeled_mask = torch.zeros(batch_size, max_nodes, dtype=torch.bool)
+    feature_fit_mask = torch.zeros(batch_size, max_nodes, dtype=torch.bool)
 
     task_type = datasets[0]["task_type"]
     n_train_nodes = datasets[0]["n_train_nodes"]
@@ -92,6 +99,8 @@ def _pad_and_batch(datasets: list[PriorDataset]) -> PriorDatasetBatch:
         features[i, :n, :f] = d["features"]
         labels[i, :n] = d["labels"]
         edges[i, :, :e] = d["edges"]
+        labeled_mask[i, :n] = d["labeled_mask"]
+        feature_fit_mask[i, :n] = d["feature_fit_mask"]
 
         assert d["n_train_nodes"] == n_train_nodes
         assert d["task_type"] == task_type
@@ -105,6 +114,8 @@ def _pad_and_batch(datasets: list[PriorDataset]) -> PriorDatasetBatch:
         n_edges=torch.tensor(edge_counts, dtype=torch.int64),
         n_train_nodes=n_train_nodes,
         task_type=task_type,
+        labeled_mask=labeled_mask,
+        feature_fit_mask=feature_fit_mask,
     )
 
 
@@ -350,6 +361,16 @@ class GraphPriorSamplerDDP:
                 dtype=torch.int64,
                 device=device,
             )
+            labeled_mask = torch.empty(
+                [local_batch_size, max_nodes],
+                dtype=torch.bool,
+                device=device,
+            )
+            feature_fit_mask = torch.empty(
+                [local_batch_size, max_nodes],
+                dtype=torch.bool,
+                device=device,
+            )
             # >>> Step 3: scatter
             features_list = global_batch["features"].split(self.batch_size, dim=0)
             labels_list = global_batch["labels"].split(self.batch_size, dim=0)
@@ -357,12 +378,18 @@ class GraphPriorSamplerDDP:
             n_nodes_list = global_batch["n_nodes"].split(self.batch_size, dim=0)
             n_features_list = global_batch["n_features"].split(self.batch_size, dim=0)
             n_edges_list = global_batch["n_edges"].split(self.batch_size, dim=0)
+            labeled_mask_list = global_batch["labeled_mask"].split(self.batch_size, dim=0)
+            feature_fit_mask_list = global_batch["feature_fit_mask"].split(
+                self.batch_size, dim=0
+            )
             torch.distributed.scatter(features, list(features_list), src=0)  # type: ignore
             torch.distributed.scatter(labels, list(labels_list), src=0)  # type: ignore
             torch.distributed.scatter(edges, list(edges_list), src=0)  # type: ignore
             torch.distributed.scatter(n_nodes, list(n_nodes_list), src=0)  # type: ignore
             torch.distributed.scatter(n_features, list(n_features_list), src=0)  # type: ignore
             torch.distributed.scatter(n_edges, list(n_edges_list), src=0)  # type: ignore
+            torch.distributed.scatter(labeled_mask, list(labeled_mask_list), src=0)  # type: ignore
+            torch.distributed.scatter(feature_fit_mask, list(feature_fit_mask_list), src=0)  # type: ignore
         else:
             # >>> Step 1: metadata
             metadata = torch.tensor([0] * 6, dtype=torch.int64, device=device)
@@ -406,6 +433,16 @@ class GraphPriorSamplerDDP:
                 dtype=torch.int64,
                 device=device,
             )
+            labeled_mask = torch.empty(
+                [local_batch_size, max_nodes],
+                dtype=torch.bool,
+                device=device,
+            )
+            feature_fit_mask = torch.empty(
+                [local_batch_size, max_nodes],
+                dtype=torch.bool,
+                device=device,
+            )
             # >>> Step 3: scatter
             torch.distributed.scatter(features, None, src=0)  # type: ignore
             torch.distributed.scatter(labels, None, src=0)  # type: ignore
@@ -413,6 +450,8 @@ class GraphPriorSamplerDDP:
             torch.distributed.scatter(n_nodes, None, src=0)  # type: ignore
             torch.distributed.scatter(n_features, None, src=0)  # type: ignore
             torch.distributed.scatter(n_edges, None, src=0)  # type: ignore
+            torch.distributed.scatter(labeled_mask, None, src=0)  # type: ignore
+            torch.distributed.scatter(feature_fit_mask, None, src=0)  # type: ignore
 
         # >>> Step 4: collect & return
         local_batch: PriorDatasetBatch = {
@@ -424,6 +463,8 @@ class GraphPriorSamplerDDP:
             "n_edges": n_edges,
             "n_train_nodes": n_train_nodes,
             "task_type": TASK_TYPE_CODES_INV[task_type_code],
+            "labeled_mask": labeled_mask,
+            "feature_fit_mask": feature_fit_mask,
         }
 
         if self.verbose and self.prior is not None:

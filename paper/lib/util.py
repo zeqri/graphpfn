@@ -625,7 +625,17 @@ def allreduce_float(value: float, mode: str = "mean") -> float:
 
 
 def configure_ddp(backend="nccl", timeout_minutes: int = 10) -> None:
-    _torch().distributed.init_process_group(  # type: ignore
+    torch = _torch()
+    if torch.cuda.is_available():
+        # With multiple GPUs visible per node (e.g. --gres=gpu:4 shared by 4
+        # local ranks), NCCL needs each process pinned to its own device
+        # *before* init_process_group -- otherwise every rank defaults to
+        # PyTorch's "current device" (GPU 0) and NCCL rejects the collision
+        # ("Duplicate GPU detected"). Harmless/no-op when only one GPU is
+        # visible per process (the single-GPU-per-node case this previously
+        # worked under).
+        torch.cuda.set_device(get_local_rank())
+    torch.distributed.init_process_group(  # type: ignore
         backend,
         timeout=datetime.timedelta(minutes=timeout_minutes),
         rank=get_rank(),
@@ -711,7 +721,16 @@ def is_failed_trial(study: Study, index: int = -1) -> bool:
 # Other
 # ==================================================================================
 def get_git_revision_hash() -> str:
-    return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("ascii").strip()
+    try:
+        return (
+            subprocess.check_output(["git", "rev-parse", "HEAD"])
+            .decode("ascii")
+            .strip()
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        # `git` isn't on PATH on some compute nodes; this is just metadata
+        # for the run report, not worth failing the whole run over.
+        return "unknown"
 
 
 def random_float(a: float, b: float) -> float:

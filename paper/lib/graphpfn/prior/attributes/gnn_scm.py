@@ -19,8 +19,19 @@ from .structural import compute_structural_features, get_structural_feature_coun
 def sample_attributes_gnn(
     graph: dgl.DGLGraph,
     config: GNNSCMConfig,
+    *,
+    zero_causes_mask: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Generate node features and labels using GNN-based SCM."""
+    """Generate node features and labels using GNN-based SCM.
+
+    Args:
+        zero_causes_mask: Optional boolean mask, shape (n_nodes,). Rows marked
+            True have their private SCM input ("causes") zeroed before the
+            forward pass, so their eventual feature/label values can only
+            depend on the graph (via GNN-type neurons), never on a private
+            per-row random draw. Used for virtual/readout nodes that must not
+            carry any signal the model can't observe.
+    """
     base = config["base"]
     n_nodes = graph.num_nodes()
     n_features = base["n_features"]
@@ -55,6 +66,9 @@ def sample_attributes_gnn(
     initialize_weights(scm, **base["init"])
 
     causes = sample_inputs(n_nodes, n_causes, **base["causes"])
+    if zero_causes_mask is not None:
+        causes = causes.clone()
+        causes[zero_causes_mask] = 0.0
     struct_features = compute_structural_features(graph, **config["structural"])
     if struct_features is not None:
         inputs = torch.cat([causes, struct_features], dim=1)
