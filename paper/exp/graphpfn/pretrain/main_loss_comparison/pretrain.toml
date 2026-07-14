@@ -36,8 +36,8 @@ _type_ = "graph_then_attributes"
 
 [base_config.prior.prior.values.graph.n_nodes]
 _distribution_ = "log_uniform_int"
-min = 1000
-max = 5000
+min = 100
+max = 500
 _shared_ = true
 
 [base_config.prior.prior.values.graph.avg_degree]

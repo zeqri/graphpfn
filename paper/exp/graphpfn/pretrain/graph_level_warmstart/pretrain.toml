@@ -1,0 +1,301 @@
+## Graph-level regression pretraining: many small synthetic graphs per
+## dataset, one virtual (readout) node each, only virtual nodes ever
+## labeled/context/query. See lib/graphpfn/prior/priors/graph_level.py.
+##
+## WARM-START VARIANT (compare against exp/graphpfn/pretrain/graph_level/):
+## identical to the from-scratch graph_level run in every way except
+## `base_checkpoint` below, which initializes the (otherwise randomly
+## initialized) graph adapter parameters from the released GraphPFN-1.3
+## checkpoint (`hf://eremeev-d/graphpfn-1.3/graphpfn-adapters-1_3.pt`,
+## trained on the node-level prior) instead of from scratch. The LimiX
+## backbone itself is unaffected either way -- it's always loaded frozen
+## from LimiX-16M.ckpt regardless of `base_checkpoint` (see
+## lib/graphpfn/model.py's `freeze_tfm`/GraphPFN.__init__: everything under
+## `self.tfm` is frozen by default except each layer's inserted graph
+## adapter (`.conv`/`.mlp`), which is exactly what this checkpoint contains
+## -- 144 tensors, nothing else, verified key-for-key against a fresh
+## internal GraphPFN instance by
+## bin/graphpfn/convert_released_adapters_checkpoint.py, which produced the
+## local file referenced below). Purpose: test whether starting the graph
+## adapters from a checkpoint that already knows general-purpose graph
+## aggregation (learned on much larger/denser node-level-prior graphs)
+## converges faster/better than random init on this small-graph,
+## virtual-node prior. See graph_level_pretrain_conversation.md.
+##
+## Known scope limitations of this first version (deliberate, not oversights):
+##  - Regression only (no classification task config -- see graph_level.py,
+##    it hardcodes TaskType.REGRESSION and doesn't consume a `task` config
+##    section at all).
+##  - No masked-graph-modeling / edge SSL loss (the original node-level
+##    pretraining's `[base_config.ssl.edge]`): a virtual node's star edges to
+##    its own real nodes are trivially always-positive, so the existing
+##    global edge sampler isn't a meaningful signal here without further
+##    changes to restrict it to real (atom-atom) edges only.
+##  - Real-data evaluation stays empty (`evaluation_data.real = []`): the
+##    GraphLand datasets it would reference aren't present in this
+##    environment, and they're all node-level anyway. Periodic synthetic
+##    eval IS wired up: `unbatch_prior_dataset`/`convert_to_graph_dataset`
+##    (lib/graphpfn/prior/util.py) are now labeled_mask-aware, so "test"
+##    only ever contains query virtual nodes (never atoms), and
+##    `evaluate_dataset` (bin/graphpfn/pretrain.py) fits drop-constant-
+##    feature stats on `feature_fit_mask` (atoms) instead of the train mask
+##    (context virtual rows, which are all-zero placeholders and would
+##    otherwise make every column look constant). See
+##    bin/graphpfn/graph_level_eval_smoke_test.py for a CPU-only regression
+##    test of this path.
+
+function = "bin.graphpfn.pretrain.main"
+
+[base_config]
+seed = 0
+amp = true
+# Warm-starts the graph adapter parameters only (144 tensors); the frozen
+# LimiX backbone is unaffected. See the WARM-START VARIANT note above.
+base_checkpoint = "checkpoints/graphpfn-adapters-1_3_internal_format.pt"
+n_steps = 10000
+n_gradient_accumulation_steps = 20
+epoch_size = 100
+gradient_clipping_norm = 1.0
+batch_size = 1
+
+[base_config.optimizer]
+type = "AdamW"
+lr = 0.001
+weight_decay = 0.1
+
+[base_config.evaluation_data]
+n_synthetic_per_gpu = 8
+real = []
+
+[base_config.prior.sanity_check]
+min_features = 4
+
+[base_config.prior.prior]
+_type_ = "graph_level"
+
+# >>> How many labeled examples (graphs) per synthetic dataset, and how the
+# context/query split among them is chosen. Mirrors graph.n_nodes/train_ratio
+# in the node-level prior, just at graph granularity instead of node
+# granularity (see graph_level.py's module docstring for why).
+[base_config.prior.prior.n_graphs]
+_distribution_ = "log_uniform_int"
+_shared_ = true
+min = 20
+max = 200
+
+[base_config.prior.prior.total_n_nodes_budget]
+_distribution_ = "log_uniform_int"
+_shared_ = true
+min = 1000
+max = 5000
+
+[base_config.prior.prior.train_ratio]
+_distribution_ = "uniform"
+_shared_ = true
+min = 0.05
+max = 0.5
+
+[base_config.prior.prior.label_aggregation]
+_distribution_ = "choice"
+values = ["mean", "sum", "max", "min"]
+
+# >>> Per-small-graph structure bounds. Fixed (not swept via the
+# distribution system) for this first version: graph_level.py samples each
+# of the n_graphs graphs' own size/degree/n_groups independently, uniformly
+# within these bounds, since the generic distribution machinery resolves a
+# config once per whole dataset rather than once per graph.
+[base_config.prior.prior.graph]
+min_nodes = 8
+max_nodes = 60
+avg_degree_min = 1.5
+avg_degree_max = 10.0
+n_groups_min = 1
+n_groups_max = 4
+offdiagonal_coef = 0.1
+
+# >>> SCM: identical distributions to the node-level prior. One instance is
+# built per synthetic dataset and applied once to the whole disjoint union
+# (shared "task" across every small graph in the dataset), exactly like one
+# graph's many nodes share one SCM in the node-level prior. graph_conv_ratio
+# (including its 1-in-11 chance of being exactly 0, which would make an
+# ordinary node's own label ungrounded from the graph) doesn't need special
+# handling here: virtual-node labels are always overridden by an aggregate
+# of their own real nodes' labels after the SCM runs (see graph_level.py),
+# so they're graph-dependent by construction regardless of graph_conv_ratio.
+[base_config.prior.prior.scm]
+_type_ = "gnn"
+
+[base_config.prior.prior.scm.base]
+_type_ = "mlp"
+
+[base_config.prior.prior.scm.base.n_features]
+_distribution_ = "uniform_int"
+min = 4
+max = 100
+
+[base_config.prior.prior.scm.base.n_causes]
+_distribution_ = "meta_trunc_norm_log_scaled"
+min_mean = 1
+max_mean = 12
+min_std = 0.01
+max_std = 1.0
+lower_bound = 1
+round = true
+
+[base_config.prior.prior.scm.base.n_layers]
+_distribution_ = "meta_trunc_norm_log_scaled"
+min_mean = 1
+max_mean = 6
+min_std = 0.01
+max_std = 1.0
+lower_bound = 2
+round = true
+
+[base_config.prior.prior.scm.base.hidden_dim]
+_distribution_ = "meta_trunc_norm_log_scaled"
+min_mean = 5
+max_mean = 130
+min_std = 0.01
+max_std = 1.0
+lower_bound = 4
+round = true
+
+[base_config.prior.prior.scm.base.activation_type]
+_distribution_ = "choice"
+values = [
+    "tanh",
+    "leaky_relu",
+    "elu",
+    "identity",
+    "selu",
+    "silu",
+    "relu",
+    "softplus",
+    "relu6",
+    "hardtanh",
+    "sign",
+    "rbf",
+    "exp",
+    "sqrt_abs",
+    "unit_interval_indicator",
+    "sine",
+    "square",
+    "abs",
+    "random_fourier",
+]
+
+[base_config.prior.prior.scm.base.activation_type._runtime_]
+_distribution_ = "bernoulli"
+p = 0.5
+
+[base_config.prior.prior.scm.base.activation_type.weights]
+random_fourier = 10.0
+
+[base_config.prior.prior.scm.base.causes.strategy]
+_distribution_ = "choice"
+values = [
+    "normal",
+    "mixed",
+    "uniform",
+]
+
+[base_config.prior.prior.scm.base.causes.pre_sample_stats]
+_distribution_ = "choice"
+values = [true, false]
+
+[base_config.prior.prior.scm.base.noise.std]
+_distribution_ = "meta_trunc_norm_log_scaled"
+min_mean = 0.0001
+max_mean = 0.3
+min_std = 0.01
+max_std = 1.0
+lower_bound = 0.0
+round = false
+
+[base_config.prior.prior.scm.base.noise.pre_sample_std]
+_distribution_ = "choice"
+values = [true, false]
+
+[base_config.prior.prior.scm.base.init]
+scale_std_by_dropout = true
+
+[base_config.prior.prior.scm.base.init.std]
+_distribution_ = "meta_trunc_norm_log_scaled"
+min_mean = 0.01
+max_mean = 10.0
+min_std = 0.01
+max_std = 1.0
+lower_bound = 0.0
+round = false
+
+[base_config.prior.prior.scm.base.init.block_wise_dropout]
+_distribution_ = "choice"
+values = [true, false]
+
+[base_config.prior.prior.scm.base.init.p_dropout]
+_distribution_ = "meta_beta"
+scale = 0.9
+min = 0.1
+max = 5.0
+
+[base_config.prior.prior.scm.base.causal.enabled]
+_distribution_ = "choice"
+values = [true, false]
+
+[base_config.prior.prior.scm.base.causal.y_is_effect]
+_distribution_ = "choice"
+values = [true, false]
+
+[base_config.prior.prior.scm.base.causal.in_clique]
+_distribution_ = "choice"
+values = [true, false]
+
+[base_config.prior.prior.scm.base.causal.sort_features]
+_distribution_ = "choice"
+values = [true, false]
+
+[base_config.prior.prior.scm.conv_type]
+_distribution_ = "choice"
+values = [
+    "gcn",
+    "sage-mean",
+    "sage-min",
+    "sage-max",
+    "gt",
+]
+
+[base_config.prior.prior.scm.graph_conv_ratio]
+_distribution_ = "choice"
+values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+[base_config.prior.prior.scm.structural]
+lappe_k = 0
+
+[base_config.prior.prior.scm.structural.use_degree]
+_distribution_ = "choice"
+values = [true, false]
+
+[base_config.prior.prior.scm.structural.use_pagerank]
+_distribution_ = "choice"
+values = [true, false]
+
+[base_config.prior.prior.postprocessing]
+p_cat = 0.2
+max_categories = 256
+permute_features = true
+permute_labels = false
+
+[base_config.sampler]
+batch_size = 1
+n_workers = 12
+prefetch_factor = 24
+verbose = true
+
+[base_config.model.edge_head]
+
+[base_config.ema]
+decay = 0.98
+
+[base_config.lr_scheduler]
+n_warmup_steps = 1000
+scheduler = "cosine"
