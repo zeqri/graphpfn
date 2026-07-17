@@ -1,0 +1,378 @@
+{
+    "function": "bin.graphpfn.pretrain.main",
+    "commit": "unknown",
+    "gpus": [
+        "NVIDIA A100-SXM4-40GB",
+        "NVIDIA A100-SXM4-40GB",
+        "NVIDIA A100-SXM4-40GB",
+        "NVIDIA A100-SXM4-40GB"
+    ],
+    "config": {
+        "seed": 0,
+        "amp": true,
+        "n_steps": 10000,
+        "n_gradient_accumulation_steps": 20,
+        "epoch_size": 100,
+        "gradient_clipping_norm": 1.0,
+        "batch_size": 1,
+        "optimizer": {
+            "type": "AdamW",
+            "lr": 0.001,
+            "weight_decay": 0.1
+        },
+        "evaluation_data": {
+            "n_synthetic_per_gpu": 8,
+            "real": []
+        },
+        "prior": {
+            "sanity_check": {
+                "min_features": 4
+            },
+            "prior": {
+                "_distribution_": "choice",
+                "_shared_": true,
+                "values": [
+                    {
+                        "_type_": "graph_then_attributes",
+                        "graph": {
+                            "n_nodes": {
+                                "_distribution_": "log_uniform_int",
+                                "min": 250,
+                                "max": 1250,
+                                "_shared_": true
+                            },
+                            "avg_degree": {
+                                "_distribution_": "mixed_log_uniform",
+                                "min_first": 1.5,
+                                "max_first": 100.0,
+                                "min_second": 100.0,
+                                "max_second": 500.0,
+                                "p_first": 0.5,
+                                "_shared_": true
+                            },
+                            "sampler": {
+                                "_distribution_": "choice",
+                                "values": [
+                                    {
+                                        "_type_": "multi-graph",
+                                        "size_jitter": 0.12,
+                                        "n_graphs": {
+                                            "_distribution_": "uniform_int",
+                                            "min": 10,
+                                            "max": 30
+                                        },
+                                        "base_n_nodes": {
+                                            "_distribution_": "log_uniform_int",
+                                            "min": 15,
+                                            "max": 60
+                                        },
+                                        "sub_graph": {
+                                            "avg_degree": {
+                                                "_distribution_": "log_uniform",
+                                                "min": 3.0,
+                                                "max": 6.0,
+                                                "_runtime_": true
+                                            },
+                                            "sampler": {
+                                                "_distribution_": "choice",
+                                                "_runtime_": true,
+                                                "values": [
+                                                    {
+                                                        "_type_": "tree-with-rings",
+                                                        "max_degree": 4,
+                                                        "min_ring_size": 3,
+                                                        "max_ring_size": 7
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "scm": {
+                            "_type_": "gnn",
+                            "base": {
+                                "_type_": "mlp",
+                                "n_features": {
+                                    "_distribution_": "uniform_int",
+                                    "_shared_": true,
+                                    "min": 4,
+                                    "max": 100
+                                },
+                                "n_causes": {
+                                    "_distribution_": "meta_trunc_norm_log_scaled",
+                                    "min_mean": 1,
+                                    "max_mean": 12,
+                                    "min_std": 0.01,
+                                    "max_std": 1.0,
+                                    "lower_bound": 1,
+                                    "round": true
+                                },
+                                "n_layers": {
+                                    "_distribution_": "meta_trunc_norm_log_scaled",
+                                    "min_mean": 1,
+                                    "max_mean": 6,
+                                    "min_std": 0.01,
+                                    "max_std": 1.0,
+                                    "lower_bound": 2,
+                                    "round": true
+                                },
+                                "hidden_dim": {
+                                    "_distribution_": "meta_trunc_norm_log_scaled",
+                                    "min_mean": 5,
+                                    "max_mean": 130,
+                                    "min_std": 0.01,
+                                    "max_std": 1.0,
+                                    "lower_bound": 4,
+                                    "round": true
+                                },
+                                "activation_type": {
+                                    "_distribution_": "choice",
+                                    "values": [
+                                        "tanh",
+                                        "leaky_relu",
+                                        "elu",
+                                        "identity",
+                                        "selu",
+                                        "silu",
+                                        "relu",
+                                        "softplus",
+                                        "relu6",
+                                        "hardtanh",
+                                        "sign",
+                                        "rbf",
+                                        "exp",
+                                        "sqrt_abs",
+                                        "unit_interval_indicator",
+                                        "sine",
+                                        "square",
+                                        "abs",
+                                        "random_fourier"
+                                    ],
+                                    "_runtime_": {
+                                        "_distribution_": "bernoulli",
+                                        "p": 0.5
+                                    },
+                                    "weights": {
+                                        "random_fourier": 10.0
+                                    }
+                                },
+                                "causes": {
+                                    "strategy": {
+                                        "_distribution_": "choice",
+                                        "values": [
+                                            "normal",
+                                            "mixed",
+                                            "uniform"
+                                        ]
+                                    },
+                                    "pre_sample_stats": {
+                                        "_distribution_": "choice",
+                                        "values": [
+                                            true,
+                                            false
+                                        ]
+                                    }
+                                },
+                                "noise": {
+                                    "std": {
+                                        "_distribution_": "meta_trunc_norm_log_scaled",
+                                        "min_mean": 0.0001,
+                                        "max_mean": 0.3,
+                                        "min_std": 0.01,
+                                        "max_std": 1.0,
+                                        "lower_bound": 0.0,
+                                        "round": false
+                                    },
+                                    "pre_sample_std": {
+                                        "_distribution_": "choice",
+                                        "values": [
+                                            true,
+                                            false
+                                        ]
+                                    }
+                                },
+                                "init": {
+                                    "scale_std_by_dropout": true,
+                                    "std": {
+                                        "_distribution_": "meta_trunc_norm_log_scaled",
+                                        "min_mean": 0.01,
+                                        "max_mean": 10.0,
+                                        "min_std": 0.01,
+                                        "max_std": 1.0,
+                                        "lower_bound": 0.0,
+                                        "round": false
+                                    },
+                                    "block_wise_dropout": {
+                                        "_distribution_": "choice",
+                                        "values": [
+                                            true,
+                                            false
+                                        ]
+                                    },
+                                    "p_dropout": {
+                                        "_distribution_": "meta_beta",
+                                        "scale": 0.9,
+                                        "min": 0.1,
+                                        "max": 5.0
+                                    }
+                                },
+                                "causal": {
+                                    "enabled": {
+                                        "_distribution_": "choice",
+                                        "values": [
+                                            true,
+                                            false
+                                        ]
+                                    },
+                                    "y_is_effect": {
+                                        "_distribution_": "choice",
+                                        "values": [
+                                            true,
+                                            false
+                                        ]
+                                    },
+                                    "in_clique": {
+                                        "_distribution_": "choice",
+                                        "values": [
+                                            true,
+                                            false
+                                        ]
+                                    },
+                                    "sort_features": {
+                                        "_distribution_": "choice",
+                                        "values": [
+                                            true,
+                                            false
+                                        ]
+                                    }
+                                }
+                            },
+                            "conv_type": {
+                                "_distribution_": "choice",
+                                "values": [
+                                    "gcn",
+                                    "sage-mean",
+                                    "sage-min",
+                                    "sage-max",
+                                    "gt"
+                                ]
+                            },
+                            "graph_conv_ratio": {
+                                "_distribution_": "choice",
+                                "values": [
+                                    0.0,
+                                    0.1,
+                                    0.2,
+                                    0.3,
+                                    0.4,
+                                    0.5,
+                                    0.6,
+                                    0.7,
+                                    0.8,
+                                    0.9,
+                                    1.0
+                                ]
+                            },
+                            "structural": {
+                                "lappe_k": 0,
+                                "use_degree": {
+                                    "_distribution_": "choice",
+                                    "values": [
+                                        true,
+                                        false
+                                    ]
+                                },
+                                "use_pagerank": {
+                                    "_distribution_": "choice",
+                                    "values": [
+                                        true,
+                                        false
+                                    ]
+                                }
+                            }
+                        },
+                        "task": {
+                            "multiclass_type": "rank",
+                            "p_ordered": 0.2,
+                            "p_reverse": 0.5,
+                            "_type_": {
+                                "_distribution_": "choice",
+                                "_shared_": true,
+                                "values": [
+                                    "regression",
+                                    "binclass",
+                                    "multiclass"
+                                ]
+                            },
+                            "n_classes": {
+                                "_distribution_": "uniform_int",
+                                "min": 2,
+                                "max": 10
+                            },
+                            "quantile": {
+                                "_distribution_": "uniform",
+                                "min": 0.01,
+                                "max": 0.99
+                            }
+                        },
+                        "postprocessing": {
+                            "p_cat": 0.2,
+                            "max_categories": 256,
+                            "permute_features": true,
+                            "permute_labels": true
+                        },
+                        "train_ratio": {
+                            "_distribution_": "uniform",
+                            "min": 0.05,
+                            "max": 0.5,
+                            "_shared_": true
+                        }
+                    }
+                ]
+            }
+        },
+        "sampler": {
+            "batch_size": 1,
+            "n_workers": 12,
+            "prefetch_factor": 24,
+            "verbose": true
+        },
+        "model": {
+            "edge_head": {}
+        },
+        "ema": {
+            "decay": 0.98
+        },
+        "lr_scheduler": {
+            "n_warmup_steps": 1000,
+            "scheduler": "cosine"
+        },
+        "ssl": {
+            "edge": {
+                "coef": 0.1
+            }
+        }
+    },
+    "n_parameters": 3866115,
+    "train": {
+        "metrics": {
+            "synthetic": {
+                "score": 0.48365127093345084
+            }
+        },
+        "best_step": 10000
+    },
+    "metrics": {
+        "synthetic": {
+            "score": 0.48365127093345084
+        }
+    },
+    "lr": [
+        0.0,
+        0.0
+    ],
+    "loss": 0.7813823819160461,
+    "time": 31105.36926994307
+}
