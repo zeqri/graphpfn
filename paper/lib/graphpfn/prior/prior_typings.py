@@ -188,6 +188,19 @@ class ERSamplerConfig(TypedDict):
     _type_: Literal["erdos-renyi"]
 
 
+class TreeWithRingsSamplerConfig(TypedDict):
+    """Molecule-like alternative to the SBM/PA family: a degree-capped random
+    tree (connected by construction) plus a small number of ring-closing
+    edges between nodes already close in tree-distance. See
+    lib.graphpfn.prior.graphs.tree_with_rings for the rationale.
+    """
+
+    _type_: Literal["tree-with-rings"]
+    max_degree: int
+    min_ring_size: int
+    max_ring_size: int
+
+
 class MultiLevelSBMWithPASamplerConfig(TypedDict):
     _type_: Literal["multi-level-sbm-with-pa"]
     pa_nodes_ratio: float
@@ -199,12 +212,44 @@ class MultiLevelSBMWithPASamplerConfig(TypedDict):
     offdiagonal_coef: float
 
 
+class MultiGraphSamplerConfig(TypedDict):
+    """Combine several independently-sampled sub-graphs into one dataset.
+
+    Each of the `n_graphs` sub-graphs is generated from `sub_graph` (a
+    GraphConfig-shaped template, minus `n_nodes` -- see `base_n_nodes`) via a
+    fresh call to sample_graph. The template's leaf distributions are
+    expected to be marked `_runtime_: true` so sample_config leaves them
+    unresolved; they are then resampled independently for every sub-graph
+    (see `resample_config`). The sub-graphs are combined via disjoint union
+    (block-diagonal adjacency), so message passing / attention naturally
+    stays scoped to each node's own sub-graph.
+
+    `base_n_nodes` is this dataset's shared "typical" sub-graph size (plain,
+    *not* `_runtime_`, so it's resolved once per dataset -- different
+    datasets/training steps can target different typical sizes). Each
+    sub-graph's actual size is then `base_n_nodes` jittered by +/-
+    `size_jitter` (relative), so sub-graphs within one dataset stay close in
+    size to each other instead of spanning some wide independent range. Both
+    are optional: if omitted, `sub_graph` must instead include its own
+    `n_nodes` distribution, and every sub-graph draws its size independently
+    (the original, pre-molecule-variant behavior).
+    """
+
+    _type_: Literal["multi-graph"]
+    n_graphs: int
+    sub_graph: dict[str, ConfigValue]
+    base_n_nodes: NotRequired[int]
+    size_jitter: NotRequired[float]
+
+
 GraphSamplerConfig = (
     SBMSamplerConfig
     | GeometricSamplerConfig
     | PASamplerConfig
     | ERSamplerConfig
     | MultiLevelSBMWithPASamplerConfig
+    | TreeWithRingsSamplerConfig
+    | MultiGraphSamplerConfig
 )
 
 

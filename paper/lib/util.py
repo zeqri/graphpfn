@@ -625,7 +625,14 @@ def allreduce_float(value: float, mode: str = "mean") -> float:
 
 
 def configure_ddp(backend="nccl", timeout_minutes: int = 10) -> None:
-    _torch().distributed.init_process_group(  # type: ignore
+    torch = _torch()
+    # NCCL requires each process to be bound to its own GPU *before*
+    # init_process_group; otherwise every rank defaults to device 0 within
+    # its visible set, and NCCL fails with "Duplicate GPU detected" as soon
+    # as more than one rank shares a node (e.g. --nproc-per-node > 1).
+    if torch.cuda.is_available():
+        torch.cuda.set_device(get_local_rank())
+    torch.distributed.init_process_group(  # type: ignore
         backend,
         timeout=datetime.timedelta(minutes=timeout_minutes),
         rank=get_rank(),
@@ -711,7 +718,17 @@ def is_failed_trial(study: Study, index: int = -1) -> bool:
 # Other
 # ==================================================================================
 def get_git_revision_hash() -> str:
-    return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("ascii").strip()
+    # `git` is sometimes unavailable on compute nodes (e.g. only installed on
+    # login nodes), and this is purely informational report metadata, so
+    # degrade gracefully instead of crashing the run.
+    try:
+        return (
+            subprocess.check_output(["git", "rev-parse", "HEAD"])
+            .decode("ascii")
+            .strip()
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return "unknown"
 
 
 def random_float(a: float, b: float) -> float:

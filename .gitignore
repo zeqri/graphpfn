@@ -226,3 +226,8 @@ __marimo__/
 checkpoints/*
 data
 local/*
+
+
+
+*.out
+*.sh

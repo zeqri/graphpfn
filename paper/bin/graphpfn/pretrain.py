@@ -1,3 +1,4 @@
+import json
 import math
 import warnings
 from collections.abc import Callable
@@ -429,6 +430,8 @@ def main(
             }
             logger.info(f"{info=}")
             tracker.log(info, step=checkpoint["step"])
+            with open(output / "training_log.jsonl", "a") as f:
+                f.write(json.dumps({"step": checkpoint["step"], **info}) + "\n")
             lib.dump_checkpoint(output, checkpoint)
             backup(output)
         lib.barrier()

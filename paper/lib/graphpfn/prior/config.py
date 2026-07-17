@@ -242,6 +242,28 @@ def resolve_or_sample(value: ConfigValue) -> ConfigValue:
     return value
 
 
+def resample_config(value: ConfigValue) -> ConfigValue:
+    """Recursively resample every distribution found in a (sub-)config tree.
+
+    Unlike sample_config, this ignores `_shared_`/`_runtime_` flags entirely
+    and always draws a fresh value from any distribution it encounters.
+
+    Intended for config sub-trees that must be resampled multiple times at
+    runtime (e.g. once per synthetic sub-graph of a multi-graph dataset).
+    Such sub-trees are marked `_runtime_: true` upstream precisely so that
+    sample_config/sample_configs leave them unresolved; this function is what
+    later resamples them, independently, as many times as needed.
+    """
+    if isinstance(value, dict):
+        if "_distribution_" in value:
+            sampled = sample_value(cast(DistributionSpec, value))
+            if isinstance(sampled, dict):
+                return resample_config(sampled)
+            return sampled
+        return {k: resample_config(v) for k, v in value.items()}
+    return value
+
+
 def _collect_and_validate_shared(
     value: ConfigValue,
     path: tuple[str, ...],
