@@ -201,6 +201,21 @@ class TreeWithRingsSamplerConfig(TypedDict):
     max_ring_size: int
 
 
+class MoleculeSkeletonSamplerConfig(TypedDict):
+    """Valence-capped alternative to tree-with-rings: per-element (C/N/O/F)
+    valence budgets and sampled bond orders shape a heterogeneous,
+    chemistry-consistent degree distribution (instead of one uniform
+    max_degree for every node), then explicit hydrogen leaves saturate
+    leftover valence. Topology only -- no distances yet. See
+    lib.graphpfn.prior.graphs.molecule_skeleton for the rationale.
+    """
+
+    _type_: Literal["molecule-skeleton"]
+    heavy_atom_fraction: float
+    min_ring_size: int
+    max_ring_size: int
+
+
 class MultiLevelSBMWithPASamplerConfig(TypedDict):
     _type_: Literal["multi-level-sbm-with-pa"]
     pa_nodes_ratio: float
@@ -249,6 +264,7 @@ GraphSamplerConfig = (
     | ERSamplerConfig
     | MultiLevelSBMWithPASamplerConfig
     | TreeWithRingsSamplerConfig
+    | MoleculeSkeletonSamplerConfig
     | MultiGraphSamplerConfig
 )
 
@@ -369,6 +385,9 @@ PriorConfig = GraphThenAttributesPriorConfig | AttributesThenGraphPriorConfig
 
 class SanityCheckConfig(TypedDict):
     min_features: int
+    # Both optional; default to a no-op (see checks.check_train_ratio).
+    min_train_ratio: NotRequired[float]
+    max_train_ratio: NotRequired[float]
 
 
 class SampledConfig(TypedDict):

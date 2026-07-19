@@ -4,6 +4,7 @@ from ..prior_typings import GraphConfig, unpack
 from .erdos_renyi import sample_erdos_renyi
 from .geometric import sample_geometric
 from .multi_graph import sample_multi_graph
+from .molecule_skeleton import sample_molecule_skeleton
 from .multi_level_sbm_with_pa import sample_multi_level_sbm_with_pa
 from .preferential_attachment import sample_preferential_attachment
 from .sbm import sample_sbm
@@ -85,6 +86,12 @@ def sample_graph(config: GraphConfig):
                 avg_degree=avg_degree,
                 **unpack(sampler),
             )
+        case "molecule-skeleton":
+            graph = sample_molecule_skeleton(
+                n_nodes=n_nodes,
+                avg_degree=avg_degree,
+                **unpack(sampler),
+            )
         case _:
             raise ValueError(f"Unknown graph sampler: {sampler['_type_']}")
 
@@ -103,6 +110,7 @@ __all__ = [
     "sample_erdos_renyi",
     "sample_geometric",
     "sample_graph",
+    "sample_molecule_skeleton",
     "sample_multi_graph",
     "sample_multi_level_sbm_with_pa",
     "sample_preferential_attachment",

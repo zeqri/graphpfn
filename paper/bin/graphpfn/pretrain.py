@@ -320,12 +320,25 @@ def main(
     graphpfn = GraphPFN(**config.get("model", dict())).to(device)
 
     if "base_checkpoint" in config:
-        checkpoint = torch.load(config["base_checkpoint"])
-        state_dict = {
-            k[7:]: v
-            for k, v in checkpoint["model_ema"].items()
-            if k.startswith("module.")
-        }
+        checkpoint = torch.load(config["base_checkpoint"], map_location="cpu")
+        if "model_ema" in checkpoint:
+            # This repo's own checkpoint format (DDP-wrapped EMA weights, as
+            # produced by save_checkpoint/prepare_checkpoint below).
+            state_dict = {
+                k[7:]: v
+                for k, v in checkpoint["model_ema"].items()
+                if k.startswith("module.")
+            }
+        elif "state_dict" in checkpoint:
+            # Released checkpoint format (e.g. hf://eremeev-d/graphpfn-1.3/
+            # graphpfn-adapters-1_3.pt, as used by the graphpfn package's
+            # GraphPFN.from_pretrained) -- a plain state_dict, no DDP prefix.
+            state_dict = checkpoint["state_dict"]
+        else:
+            raise ValueError(
+                "Unrecognized base_checkpoint format: expected a 'model_ema' "
+                f"or 'state_dict' key, got top-level keys={list(checkpoint.keys())}"
+            )
         assert all([k in graphpfn.state_dict() for k in state_dict.keys()])
         graphpfn.load_state_dict(state_dict, strict=False)
 

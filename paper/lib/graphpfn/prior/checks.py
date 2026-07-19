@@ -14,6 +14,8 @@ def check_dataset(
     task_type: TaskType,
     min_features: int,
     n_classes: int | None,
+    min_train_ratio: float = 0.0,
+    max_train_ratio: float = 1.0,
 ) -> None:
     n_nodes = features.shape[0]
 
@@ -21,6 +23,8 @@ def check_dataset(
         raise SanityCheckError(
             f"n_train_nodes ({n_train_nodes}) must be < n_nodes ({n_nodes})"
         )
+
+    check_train_ratio(n_train_nodes, n_nodes, min_train_ratio, max_train_ratio)
 
     check_no_nan(features, "features")
     check_no_nan(labels, "labels")
@@ -33,6 +37,41 @@ def check_dataset(
         assert n_classes is not None
         check_n_classes(labels, n_classes)
         check_class_coverage(labels, n_train_nodes)
+
+
+def check_train_ratio(
+    n_train_nodes: int,
+    n_nodes: int,
+    min_train_ratio: float,
+    max_train_ratio: float,
+) -> None:
+    """Reject datasets whose *realized* train ratio (n_train_nodes / actual
+    n_nodes) drifted too far from what the sampled train_ratio distribution
+    actually intended.
+
+    n_train_nodes is computed upstream from a nominal/shared node count (see
+    graph_then_attributes.py / attributes_then_graph.py), needed so every
+    dataset in a DDP-sampled batch gets the exact same n_train_nodes (a
+    single broadcast scalar, never scattered per-rank). When a dataset's
+    actual node count differs a lot from that nominal count -- e.g. from
+    size_jitter, per-sub-graph connectivity trimming, or (for
+    molecule-skeleton) the emergent hydrogen count -- the realized ratio can
+    drift far outside the sampled train_ratio's own range, producing
+    barely-informative extremes: near-zero context (too few labeled examples
+    to learn from, a noisy gradient) or near-total context (task nearly
+    solved by copying neighbors, a redundant gradient). Defaults
+    (0.0, 1.0) make this a no-op, since n_train_nodes < n_nodes is already
+    guaranteed by the check above -- pass tighter bounds (e.g. matching the
+    sampled train_ratio distribution's own [min, max]) to actually enforce
+    this.
+    """
+    train_ratio_actual = n_train_nodes / n_nodes
+    if train_ratio_actual < min_train_ratio or train_ratio_actual > max_train_ratio:
+        raise SanityCheckError(
+            f"Realized train_ratio ({train_ratio_actual:.3f}) outside "
+            f"[{min_train_ratio}, {max_train_ratio}] "
+            f"(n_train_nodes={n_train_nodes}, n_nodes={n_nodes})"
+        )
 
 
 def check_no_nan(tensor: torch.Tensor, name: str) -> None:

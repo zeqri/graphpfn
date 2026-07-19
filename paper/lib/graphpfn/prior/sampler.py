@@ -37,6 +37,10 @@ def _sample_dataset_with_retry(
     max_retries: int = 3,
 ) -> PriorDataset:
     min_features = config["sanity_check"]["min_features"]
+    # Both default to a no-op (see check_train_ratio's docstring) unless a
+    # config explicitly opts in by setting these under [*.sanity_check].
+    min_train_ratio = config["sanity_check"].get("min_train_ratio", 0.0)
+    max_train_ratio = config["sanity_check"].get("max_train_ratio", 1.0)
     task_config = config["prior"]["task"]
     n_classes = (
         task_config["n_classes"] if task_config["_type_"] == "multiclass" else None
@@ -53,6 +57,8 @@ def _sample_dataset_with_retry(
                 task_type=dataset["task_type"],
                 min_features=min_features,
                 n_classes=n_classes,
+                min_train_ratio=min_train_ratio,
+                max_train_ratio=max_train_ratio,
             )
 
             return dataset
