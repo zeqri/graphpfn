@@ -21,6 +21,14 @@ from ..prior_typings import GraphThenAttributesPriorConfig, PriorDataset
 def sample_dataset(config: GraphThenAttributesPriorConfig) -> PriorDataset:
     graph = sample_graph(config["graph"])
     edges = torch.stack(graph.edges(), dim=0)
+    # Only geometric graph samplers (e.g. molecule-skeleton) set
+    # edata["distance"]; default to zeros so PriorDataset has a
+    # consistently-shaped field regardless of which sampler produced this
+    # graph (needed for _pad_and_batch/DDP scatter, which treat every
+    # dataset in a batch uniformly).
+    edge_distance = graph.edata.get(
+        "distance", torch.zeros(edges.shape[1], dtype=torch.float32)
+    )
     actual_n_nodes = graph.num_nodes()
 
     n_train_nodes = compute_n_train_nodes(
@@ -55,6 +63,7 @@ def sample_dataset(config: GraphThenAttributesPriorConfig) -> PriorDataset:
         "features": features,
         "labels": labels,
         "edges": edges,
+        "edge_distance": edge_distance,
         "n_train_nodes": n_train_nodes,
         "task_type": task_type,
     }

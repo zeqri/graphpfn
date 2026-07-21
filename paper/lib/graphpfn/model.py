@@ -25,11 +25,19 @@ MAX_SDPA_GRAPH_SIZE = 10_000
 class SDPAInput:
     attn_mask: Tensor
     zero_degree_mask: Tensor
+    # Dense (n_nodes, n_nodes) per-edge bond distance, scattered at [dst, src]
+    # the same way attn_mask is. None when the graph has no "distance" edata
+    # (non-geometric datasets/checkpoints) -- GraphPFNGraphAttentionModule
+    # skips the distance bias entirely in that case.
+    edge_distance: Tensor | None = None
 
     def to(self, device: torch.device) -> "SDPAInput":
         return SDPAInput(
             attn_mask=self.attn_mask.to(device),
             zero_degree_mask=self.zero_degree_mask.to(device),
+            edge_distance=(
+                self.edge_distance.to(device) if self.edge_distance is not None else None
+            ),
         )
 
 
@@ -173,10 +181,17 @@ class GraphPFN(nn.Module):
 
         # old_edges = [(u, v), ...] => new_edges = [(inv_perm[u], inv_perm[v]), ...]
         n_nodes = graph.num_nodes()
+        # Permutation only relabels node ids, it doesn't reorder/drop edges,
+        # so edata (if any -- only geometric priors/finetuning data set
+        # "distance") stays aligned with the same edges and can be carried
+        # over to the rebuilt graph below unchanged.
+        distance = graph.edata.get("distance")
         src, dst = graph.edges()
         src = inv_perm[src]
         dst = inv_perm[dst]
         graph = dgl.graph((src, dst), num_nodes=n_nodes)
+        if distance is not None:
+            graph.edata["distance"] = distance
 
         # >>> Pre-compute graph adapter input
         if n_nodes < MAX_SDPA_GRAPH_SIZE:
@@ -186,7 +201,22 @@ class GraphPFN(nn.Module):
             attn_mask[dst, src] = True
             zero_degree_mask = graph.in_degrees() == 0
             attn_mask[zero_degree_mask, zero_degree_mask] = True
-            graph = SDPAInput(attn_mask=attn_mask, zero_degree_mask=zero_degree_mask)  # type: ignore
+            edge_distance = None
+            if distance is not None:
+                # Dense (n_nodes, n_nodes) scatter of per-edge distance,
+                # mirroring how attn_mask itself is scattered from (dst, src)
+                # just above. Unfilled (non-edge) entries stay 0 -- harmless,
+                # since those positions are masked to -inf in the attention
+                # module regardless of the bias value added there.
+                edge_distance = torch.zeros(
+                    n_nodes, n_nodes, dtype=distance.dtype, device=features.device
+                )
+                edge_distance[dst, src] = distance
+            graph = SDPAInput(
+                attn_mask=attn_mask,
+                zero_degree_mask=zero_degree_mask,
+                edge_distance=edge_distance,
+            )  # type: ignore
 
         # >>> Apply Backbone
         self._graph_holder.graph = graph
@@ -351,6 +381,37 @@ class GraphPFNLayerWrapper(nn.Module):
         return x, feature_attenion, sample_attention
 
 
+class EdgeDistanceEncoder(nn.Module):
+    """RBF expansion + zero-init linear projection of raw bond distance into
+    a per-head additive attention bias (SchNet/EGNN-style continuous
+    filter). Zero-init guarantees this contributes exactly 0 bias at
+    initialization, so adding this module to an existing adapter is a
+    strict no-op until it's actually trained -- same convention as this
+    file's other new adapter components (e.g.
+    GraphPFNGraphAttentionModule.output_linear below).
+    """
+
+    N_RBF = 16
+    # Matches the bond-length range covered by
+    # lib.graphpfn.prior.graphs.molecule_skeleton.BOND_PRIOR.
+    R_MIN = 0.8
+    R_MAX = 1.8
+
+    def __init__(self, n_heads: int):
+        super().__init__()
+        self.register_buffer(
+            "centers", torch.linspace(self.R_MIN, self.R_MAX, self.N_RBF)
+        )
+        self.width = (self.R_MAX - self.R_MIN) / self.N_RBF
+        self.linear = nn.Linear(self.N_RBF, n_heads)
+        torch.nn.init.zeros_(self.linear.weight)
+        torch.nn.init.zeros_(self.linear.bias)
+
+    def forward(self, distance: Tensor) -> Tensor:
+        rbf = torch.exp(-((distance.unsqueeze(-1) - self.centers) ** 2) / (2 * self.width**2))
+        return self.linear(rbf)
+
+
 class GraphPFNGraphAttentionModule(nn.Module):
     def __init__(
         self,
@@ -369,6 +430,7 @@ class GraphPFNGraphAttentionModule(nn.Module):
         self.attn_qkv_linear = nn.Linear(d, d * 3)
         self.output_linear = nn.Linear(d, d)
         self.dropout = nn.Dropout(p=dropout)
+        self.distance_encoder = EdgeDistanceEncoder(n_heads=n_heads)
 
         if zero_init:
             torch.nn.init.zeros_(self.output_linear.weight)
@@ -390,6 +452,11 @@ class GraphPFNGraphAttentionModule(nn.Module):
 
         if isinstance(graph, dgl.DGLGraph):
             attn_scores = dgl.ops.u_dot_v(graph, k, q) * self.attn_scores_coef  # type: ignore
+            if "distance" in graph.edata:
+                # attn_scores: (n_edges, n_feature_tokens, n_heads, 1);
+                # edge_bias: (n_edges, n_heads) -> reshape to broadcast.
+                edge_bias = self.distance_encoder(graph.edata["distance"])
+                attn_scores = attn_scores + edge_bias[:, None, :, None]
             attn_probs = dgl.ops.edge_softmax(graph, attn_scores)
             x = dgl.ops.u_mul_e_sum(graph, v, attn_probs)  # type: ignore
 
@@ -402,9 +469,23 @@ class GraphPFNGraphAttentionModule(nn.Module):
             k = k.permute(1, 2, 0, 3)
             v = v.permute(1, 2, 0, 3)
 
-            x = torch.nn.functional.scaled_dot_product_attention(
-                q, k, v, attn_mask=graph.attn_mask
-            )
+            if graph.edge_distance is not None:
+                # Fold the boolean mask and the distance bias into one
+                # additive float bias: -inf where masked (same effect as
+                # the boolean mask), plus the encoded distance elsewhere.
+                # Non-edge positions get bias from distance=0 too, but that
+                # never matters -- they're already -inf from the mask, and
+                # -inf + finite stays -inf.
+                edge_bias = self.distance_encoder(graph.edge_distance)  # (N, N, n_heads)
+                edge_bias = edge_bias.permute(2, 0, 1)  # (n_heads, N, N)
+                attn_bias = edge_bias.masked_fill(~graph.attn_mask, float("-inf"))
+                x = torch.nn.functional.scaled_dot_product_attention(
+                    q, k, v, attn_mask=attn_bias.unsqueeze(0)
+                )
+            else:
+                x = torch.nn.functional.scaled_dot_product_attention(
+                    q, k, v, attn_mask=graph.attn_mask
+                )
 
             x = torch.where(graph.zero_degree_mask[:, None], 0.0, x)
 

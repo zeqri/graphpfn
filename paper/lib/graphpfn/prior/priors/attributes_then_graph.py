@@ -95,6 +95,12 @@ def sample_dataset(config: AttributesThenGraphPriorConfig) -> PriorDataset:
         "features": features,
         "labels": labels,
         "edges": edges,
+        # This pipeline is restricted to sbm-simple (no geometric sampler),
+        # so there's never a real distance to report -- zero-filled purely
+        # for PriorDataset schema consistency with graph_then_attributes.py
+        # (_pad_and_batch/DDP scatter treat every dataset in a batch
+        # uniformly).
+        "edge_distance": torch.zeros(edges.shape[1], dtype=torch.float32),
         "n_train_nodes": n_train_nodes,
         "task_type": task_type,
     }

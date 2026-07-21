@@ -35,6 +35,58 @@ class SAGEConv(nn.Module):
         return self.op(graph, x)
 
 
+N_RBF = 16
+# Gaussian RBF centers span a typical organic-molecule bond-length range
+# (matches molecule_skeleton.py's BOND_PRIOR: ~0.96-1.5 Angstrom for the
+# element pairs it covers, plus margin).
+RBF_R_MIN = 0.8
+RBF_R_MAX = 1.8
+
+
+def _rbf_expand(distance: torch.Tensor, n_rbf: int = N_RBF) -> torch.Tensor:
+    """Gaussian RBF expansion of a raw scalar distance (SchNet-style
+    continuous-filter input): distance -> a bank of Gaussian bumps centered
+    across [RBF_R_MIN, RBF_R_MAX], so a downstream linear layer can express
+    an arbitrary (random, for the SCM) function of distance rather than
+    being restricted to a linear one.
+    """
+    centers = torch.linspace(
+        RBF_R_MIN, RBF_R_MAX, n_rbf, device=distance.device, dtype=distance.dtype
+    )
+    width = (RBF_R_MAX - RBF_R_MIN) / n_rbf
+    return torch.exp(-((distance.unsqueeze(-1) - centers) ** 2) / (2 * width**2))
+
+
+class GeometricConv(nn.Module):
+    """Distance-gated continuous-filter convolution (SchNet/EGNN-style):
+    each edge's message is the source node's value elementwise-gated by a
+    filter computed from an RBF expansion of that edge's bond distance,
+    instead of a fixed degree-normalized or attention-based weight. Like
+    every other SCM layer, `filter_mlp`'s weights are randomly initialized
+    (via initialize_weights, which iterates all SCM params generically) and
+    never trained -- this only shapes how synthetic labels/features depend
+    on geometry, it isn't a learned model component.
+
+    Reads `graph.edata["distance"]`; falls back to a constant dummy distance
+    if absent (e.g. this conv_type pointed at a non-geometric sampler by
+    mistake), so it never crashes on graphs without real bond distances.
+    """
+
+    def __init__(self, d_output: int, n_rbf: int = N_RBF):
+        super().__init__()
+        self.filter_mlp = nn.Linear(n_rbf, d_output)
+
+    def forward(self, graph: dgl.DGLGraph, x: torch.Tensor) -> torch.Tensor:
+        if "distance" in graph.edata:
+            distance = graph.edata["distance"].to(x.dtype)
+        else:
+            distance = torch.full(
+                (graph.num_edges(),), RBF_R_MIN, device=x.device, dtype=x.dtype
+            )
+        filter_weights = self.filter_mlp(_rbf_expand(distance))
+        return dgl.ops.u_mul_e_sum(graph, x, filter_weights)
+
+
 class GTConv(nn.Module):
     """Graph Transformer-style attention convolution."""
 
@@ -67,7 +119,7 @@ class GTConv(nn.Module):
         return x
 
 
-ConvType = Literal["gcn", "sage-mean", "sage-min", "sage-max", "gt"]
+ConvType = Literal["gcn", "sage-mean", "sage-min", "sage-max", "gt", "geometric-rbf"]
 
 
 def make_conv(conv_type: ConvType, d_output: int) -> nn.Module:
@@ -82,6 +134,8 @@ def make_conv(conv_type: ConvType, d_output: int) -> nn.Module:
         return SAGEConv("max")
     elif conv_type == "gt":
         return GTConv(d=d_output)
+    elif conv_type == "geometric-rbf":
+        return GeometricConv(d_output=d_output)
     else:
         raise ValueError(f"Unknown conv_type: {conv_type}")
 

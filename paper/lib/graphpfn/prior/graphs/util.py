@@ -58,7 +58,9 @@ def shuffle_nodes(graph: dgl.DGLGraph) -> dgl.DGLGraph:
     """Randomly permute node ordering.
 
     Ensures train/test split is not correlated with generation order.
-    Graph must have no node data (ndata).
+    Graph must have no node data (ndata). Edge data (edata), if any, is
+    carried over unchanged -- relabeling node ids doesn't reorder or drop
+    edges, so edata stays aligned with the same edges by construction.
 
     Args:
         graph: Input graph (no ndata)
@@ -73,7 +75,10 @@ def shuffle_nodes(graph: dgl.DGLGraph) -> dgl.DGLGraph:
     src, dst = graph.edges()
     new_src, new_dst = perm[src], perm[dst]
 
-    return dgl.graph((new_src, new_dst), num_nodes=n_nodes)
+    new_graph = dgl.graph((new_src, new_dst), num_nodes=n_nodes)
+    for key, value in graph.edata.items():
+        new_graph.edata[key] = value
+    return new_graph
 
 
 def extract_largest_component(

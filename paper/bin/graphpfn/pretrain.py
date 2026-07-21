@@ -424,6 +424,23 @@ def main(
             "extra": {},
         }
 
+    def distance_encoder_norm(model: torch.nn.Module) -> float | None:
+        # L2 norm of every EdgeDistanceEncoder parameter across all layers
+        # (see model.py). Zero-init at pretraining start, so this norm
+        # starting near 0 and staying near 0 for many steps would indicate
+        # the geometric distance-bias pathway isn't getting much gradient
+        # signal (e.g. too few "geometric-rbf" conv_type draws to matter);
+        # a norm that climbs steadily indicates it's actively being learned.
+        # None (not logged) for configs whose model has no such parameters
+        # at all (shouldn't happen post-model.py-update, but harmless if so).
+        total_sq = 0.0
+        found = False
+        for name, p in model.named_parameters():
+            if "distance_encoder" in name:
+                found = True
+                total_sq += p.detach().float().pow(2).sum().item()
+        return total_sq**0.5 if found else None
+
     def save_checkpoint(checkpoint: dict) -> None:
         lib.barrier()
         if lib.is_master_process():
@@ -440,6 +457,7 @@ def main(
                     if "loss" in checkpoint["report"]
                     else None
                 ),
+                "distance_encoder_norm": distance_encoder_norm(graphpfn_without_ddp),
             }
             logger.info(f"{info=}")
             tracker.log(info, step=checkpoint["step"])
@@ -502,6 +520,13 @@ def main(
             num_nodes=n_nodes,
             device=device,
         )
+        # Only geometric priors (molecule-skeleton) populate real distances;
+        # everything else gets the zero-filled placeholder from
+        # graph_then_attributes.py/attributes_then_graph.py. Attaching it
+        # here (rather than threading it as a separate kwarg) means the SSL
+        # edge-masking below (graph.remove_edges) keeps edata in sync
+        # automatically -- DGL drops edata rows together with removed edges.
+        graph.edata["distance"] = batch["edge_distance"][0, :n_edges].to(device)
         features = batch["features"][0, :n_nodes, :n_features].to(device)
         labels = batch["labels"][0, :n_nodes].to(device)
 

@@ -88,6 +88,7 @@ def _pad_and_batch(datasets: list[PriorDataset]) -> PriorDatasetBatch:
     features = torch.zeros(batch_size, max_nodes, max_features, dtype=torch.float32)
     labels = torch.zeros(batch_size, max_nodes, dtype=torch.float32)
     edges = torch.zeros(batch_size, 2, max_edges, dtype=torch.int64)
+    edge_distance = torch.zeros(batch_size, max_edges, dtype=torch.float32)
 
     task_type = datasets[0]["task_type"]
     n_train_nodes = datasets[0]["n_train_nodes"]
@@ -98,6 +99,7 @@ def _pad_and_batch(datasets: list[PriorDataset]) -> PriorDatasetBatch:
         features[i, :n, :f] = d["features"]
         labels[i, :n] = d["labels"]
         edges[i, :, :e] = d["edges"]
+        edge_distance[i, :e] = d["edge_distance"]
 
         assert d["n_train_nodes"] == n_train_nodes
         assert d["task_type"] == task_type
@@ -106,6 +108,7 @@ def _pad_and_batch(datasets: list[PriorDataset]) -> PriorDatasetBatch:
         features=features,
         labels=labels,
         edges=edges,
+        edge_distance=edge_distance,
         n_nodes=torch.tensor(node_counts, dtype=torch.int64),
         n_features=torch.tensor(feature_counts, dtype=torch.int64),
         n_edges=torch.tensor(edge_counts, dtype=torch.int64),
@@ -341,6 +344,11 @@ class GraphPriorSamplerDDP:
                 dtype=torch.int64,
                 device=device,
             )
+            edge_distance = torch.empty(
+                [local_batch_size, max_edges],
+                dtype=torch.float32,
+                device=device,
+            )
             n_nodes = torch.empty(
                 [local_batch_size],
                 dtype=torch.int64,
@@ -360,12 +368,14 @@ class GraphPriorSamplerDDP:
             features_list = global_batch["features"].split(self.batch_size, dim=0)
             labels_list = global_batch["labels"].split(self.batch_size, dim=0)
             edges_list = global_batch["edges"].split(self.batch_size, dim=0)
+            edge_distance_list = global_batch["edge_distance"].split(self.batch_size, dim=0)
             n_nodes_list = global_batch["n_nodes"].split(self.batch_size, dim=0)
             n_features_list = global_batch["n_features"].split(self.batch_size, dim=0)
             n_edges_list = global_batch["n_edges"].split(self.batch_size, dim=0)
             torch.distributed.scatter(features, list(features_list), src=0)  # type: ignore
             torch.distributed.scatter(labels, list(labels_list), src=0)  # type: ignore
             torch.distributed.scatter(edges, list(edges_list), src=0)  # type: ignore
+            torch.distributed.scatter(edge_distance, list(edge_distance_list), src=0)  # type: ignore
             torch.distributed.scatter(n_nodes, list(n_nodes_list), src=0)  # type: ignore
             torch.distributed.scatter(n_features, list(n_features_list), src=0)  # type: ignore
             torch.distributed.scatter(n_edges, list(n_edges_list), src=0)  # type: ignore
@@ -397,6 +407,11 @@ class GraphPriorSamplerDDP:
                 dtype=torch.int64,
                 device=device,
             )
+            edge_distance = torch.empty(
+                [local_batch_size, max_edges],
+                dtype=torch.float32,
+                device=device,
+            )
             n_nodes = torch.empty(
                 [local_batch_size],
                 dtype=torch.int64,
@@ -416,6 +431,7 @@ class GraphPriorSamplerDDP:
             torch.distributed.scatter(features, None, src=0)  # type: ignore
             torch.distributed.scatter(labels, None, src=0)  # type: ignore
             torch.distributed.scatter(edges, None, src=0)  # type: ignore
+            torch.distributed.scatter(edge_distance, None, src=0)  # type: ignore
             torch.distributed.scatter(n_nodes, None, src=0)  # type: ignore
             torch.distributed.scatter(n_features, None, src=0)  # type: ignore
             torch.distributed.scatter(n_edges, None, src=0)  # type: ignore
@@ -425,6 +441,7 @@ class GraphPriorSamplerDDP:
             "features": features,
             "labels": labels,
             "edges": edges,
+            "edge_distance": edge_distance,
             "n_nodes": n_nodes,
             "n_features": n_features,
             "n_edges": n_edges,

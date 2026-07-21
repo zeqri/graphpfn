@@ -206,14 +206,26 @@ class MoleculeSkeletonSamplerConfig(TypedDict):
     valence budgets and sampled bond orders shape a heterogeneous,
     chemistry-consistent degree distribution (instead of one uniform
     max_degree for every node), then explicit hydrogen leaves saturate
-    leftover valence. Topology only -- no distances yet. See
-    lib.graphpfn.prior.graphs.molecule_skeleton for the rationale.
+    leftover valence. See lib.graphpfn.prior.graphs.molecule_skeleton for
+    the rationale.
     """
 
     _type_: Literal["molecule-skeleton"]
     heavy_atom_fraction: float
     min_ring_size: int
     max_ring_size: int
+    # Optional; defaults to True in sample_molecule_skeleton. Set to False
+    # for topology-only ablations that must NOT exercise model.py's
+    # distance-bias attention pathway (which activates whenever
+    # graph.edata["distance"] is present, independent of the SCM's
+    # conv_type) -- e.g. testing avg_degree alone without any geometry.
+    compute_distances: NotRequired[bool]
+    # Optional; defaults to False in sample_molecule_skeleton (every
+    # pre-existing config's distance distribution is unaffected unless this
+    # is explicitly set). If True, distances are drawn per (element pair,
+    # bond order) instead of pooled across all orders for that pair -- see
+    # BOND_PRIOR_BY_ORDER in molecule_skeleton.py.
+    bond_order_aware_distances: NotRequired[bool]
 
 
 class MultiLevelSBMWithPASamplerConfig(TypedDict):
@@ -329,7 +341,7 @@ class GNNSCMConfig(TypedDict):
 
     _type_: Literal["gnn"]
     base: MLPSCMConfig
-    conv_type: Literal["gcn", "sage-mean", "sage-min", "sage-max", "gt"]
+    conv_type: Literal["gcn", "sage-mean", "sage-min", "sage-max", "gt", "geometric-rbf"]
     graph_conv_ratio: float
     structural: StructuralConfig
 
@@ -403,6 +415,13 @@ class PriorDataset(TypedDict):
     features: torch.Tensor
     labels: torch.Tensor
     edges: torch.Tensor
+    # Per-edge bond distance, aligned column-for-column with `edges`. Only
+    # geometric graph samplers (molecule-skeleton) populate this with real
+    # values; every other prior fills it with zeros (see
+    # graph_then_attributes.py/attributes_then_graph.py) so every
+    # PriorDataset has the same shape of fields for _pad_and_batch/DDP
+    # scatter, which treat every dataset in a batch uniformly.
+    edge_distance: torch.Tensor
     n_train_nodes: int
     task_type: TaskType
 
@@ -411,6 +430,7 @@ class PriorDatasetBatch(TypedDict):
     features: torch.Tensor
     labels: torch.Tensor
     edges: torch.Tensor
+    edge_distance: torch.Tensor
     n_nodes: torch.Tensor
     n_features: torch.Tensor
     n_edges: torch.Tensor

@@ -51,6 +51,23 @@ def sample_graph(config: GraphConfig):
         graph = shuffle_nodes(graph)
         return graph
 
+    if sampler["_type_"] == "molecule-skeleton":
+        # Skip to_simple/extract_largest_component below, same reasoning as
+        # the multi-graph case above: sample_molecule_skeleton already
+        # guarantees a simple, connected graph by construction, and (unlike
+        # tree-with-rings et al., which don't carry edata) re-running
+        # to_simple/extract_largest_component here would silently drop its
+        # edata["distance"] (they always rebuild the dgl.DGLGraph from
+        # scratch without copying edata over). shuffle_nodes is still
+        # applied -- it's edata-safe (see its docstring).
+        graph = sample_molecule_skeleton(
+            n_nodes=n_nodes,
+            avg_degree=avg_degree,
+            **unpack(sampler),
+        )
+        graph = shuffle_nodes(graph)
+        return graph
+
     match sampler["_type_"]:
         case "sbm":
             graph = sample_sbm(
@@ -82,12 +99,6 @@ def sample_graph(config: GraphConfig):
             )
         case "tree-with-rings":
             graph = sample_tree_with_rings(
-                n_nodes=n_nodes,
-                avg_degree=avg_degree,
-                **unpack(sampler),
-            )
-        case "molecule-skeleton":
-            graph = sample_molecule_skeleton(
                 n_nodes=n_nodes,
                 avg_degree=avg_degree,
                 **unpack(sampler),
