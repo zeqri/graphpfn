@@ -16,6 +16,7 @@ from .activations import (
 )
 from .common import extract_features_and_labels, initialize_weights
 from .gnn_scm import sample_attributes_gnn
+from .graph_level import sample_graph_level_labels_via_virtual_node
 from .input_sampler import InputStrategy, add_gaussian_noise, sample_inputs
 from .layers import (
     ConvType,
@@ -60,6 +61,7 @@ __all__ = [
     "rbf_activation",
     "sample_attributes_gnn",
     "sample_attributes_mlp",
+    "sample_graph_level_labels_via_virtual_node",
     "sample_inputs",
     "sample_random_activation",
     "sign_activation",

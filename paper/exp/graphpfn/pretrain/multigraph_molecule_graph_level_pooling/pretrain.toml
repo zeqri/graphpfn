@@ -1,0 +1,345 @@
+function = "bin.graphpfn.pretrain_graph_level.main"
+
+[base_config]
+seed = 0
+amp = true
+n_steps = 10000
+n_gradient_accumulation_steps = 20
+epoch_size = 100
+gradient_clipping_norm = 1.0
+n_synthetic_eval_datasets = 8
+# No base_checkpoint: unlike the node-level multigraph_molecule_* configs,
+# this is a genuinely new adapter architecture (GraphLevelGraphPFN adds
+# geometric_attention + pooler on top of GraphPFN's existing 12-layer
+# adapter) -- warm-starting the shared 12-layer adapter machinery from a
+# node-level-only checkpoint (e.g. checkpoints/graphpfn-adapters-1_3.pt)
+# would carry over weights tuned for a different consumption pattern
+# (per-node attention vs. pooled-molecule-token attention), so this starts
+# clean. The LimiX-16M backbone itself is still loaded as usual (default
+# random_init_tfm=False) and frozen (default freeze_tfm=True) -- only the
+# adapter/geometric-attention/pooler train.
+
+[base_config.optimizer]
+type = "AdamW"
+lr = 0.001
+weight_decay = 0.1
+
+[base_config.ema]
+decay = 0.98
+
+[base_config.lr_scheduler]
+n_warmup_steps = 1000
+scheduler = "cosine"
+
+[base_config.pooling]
+n_geometric_rounds = 1
+geometric_heads = 4
+pooler_heads = 4
+
+# Background-prefetching workers for dataset sampling (GraphLevelPriorSampler,
+# prior/graph_level.py), so CPU-bound dataset generation overlaps with GPU
+# compute instead of blocking the training loop every micro-step. Unlike the
+# node-level pipeline's [base_config.sampler] (n_workers=12, one sampler
+# shared via DDP scatter across all ranks), each of THIS pipeline's ranks
+# runs its own independent sampler with its own worker pool -- so total
+# worker processes = n_workers * num_ranks. With --cpus-per-task=48 shared
+# across 4 ranks (the sbatch script's DDP world size), 6 workers/rank = 24
+# background processes, leaving headroom for the 4 main training processes
+# and system overhead. Tune based on observed CPU utilization.
+[base_config.sampler]
+n_workers = 6
+prefetch_factor = 4
+
+[base_config.qm9_eval]
+root = "/p/project1/profound/al-zeqri1/PFN/graphpfn/data/QM9"
+target = "cv"
+n_graphs_min = 10
+n_graphs_max = 30
+train_ratio = 0.3
+n_eval_datasets = 8
+
+# >>> Prior: identical to multigraph_molecule_geometric_rbf_only_warmstart/
+# pretrain.toml's own [base_config.prior] subtree, EXCEPT n_graphs (see
+# below) -- reusing the same molecule-skeleton/geometric-rbf structure and
+# SCM sampling unchanged. The `task`/`postprocessing.permute_labels` keys
+# from that file are omitted: this pipeline generates labels via the
+# virtual-node SCM trick (sample_graph_level_labels_via_virtual_node) instead
+# of graph_then_attributes.py's apply_task, so those keys are simply unused
+# here rather than needing an equivalent.
+
+[base_config.prior.sanity_check]
+min_features = 4
+min_train_ratio = 0.05
+max_train_ratio = 0.5
+
+[base_config.prior.prior]
+_distribution_ = "choice"
+_shared_ = true
+
+[[base_config.prior.prior.values]]
+_type_ = "graph_then_attributes"
+
+[base_config.prior.prior.values.graph.n_nodes]
+_distribution_ = "log_uniform_int"
+min = 250
+max = 1250
+_shared_ = true
+
+[base_config.prior.prior.values.graph.avg_degree]
+_distribution_ = "mixed_log_uniform"
+min_first = 1.5
+max_first = 100.0
+min_second = 100.0
+max_second = 500.0
+p_first = 0.5
+_shared_ = true
+
+[base_config.prior.prior.values.graph.sampler]
+_distribution_ = "choice"
+
+[[base_config.prior.prior.values.graph.sampler.values]]
+_type_ = "multi-graph"
+size_jitter = 0.12
+
+# Scaled up from the reference config's 10-30 (see the long rationale in this
+# repo's history: 10-30 molecules risks a degenerate 1-molecule context split
+# and is 30-500x fewer top-level "in-context samples" than main/pretrain.toml's
+# 1000-5000 node-level range) -- but capped at 100-300, NOT the originally
+# intended 1000-2000. At 1000-2000, total atoms per dataset reached ~120,000
+# (n_graphs * base_n_nodes, base_n_nodes up to 60), and a real 4x40GB-GPU run
+# OOM'd on the very first training step inside SparseAttentionPooler
+# (pooling.py) -- its current implementation pads every atom row with a dummy
+# zero query and every query row with dummy zero keys/values to keep one
+# uniformly-shaped node-indexed tensor for dgl.ops, roughly doubling memory on
+# top of an already-large (total_atoms, n_groups, n_heads, d_head) tensor
+# (n_groups up to 50, from n_features up to 100 at features_per_group=2).
+# 100-300 keeps total atoms to roughly 1,500-18,000 -- comfortably under what
+# OOM'd -- while still giving meaningfully larger context (context sizes
+# ~5-150 molecules at train_ratio 0.05-0.5, vs ~1-15 at the original 10-30).
+# Revisit upward once SparseAttentionPooler's padding waste is fixed (e.g. via
+# a dgl heterograph with separate atom/query node types instead of padding).
+[base_config.prior.prior.values.graph.sampler.values.n_graphs]
+_distribution_ = "uniform_int"
+min = 100
+max = 300
+
+[base_config.prior.prior.values.graph.sampler.values.base_n_nodes]
+_distribution_ = "log_uniform_int"
+min = 15
+max = 60
+
+[base_config.prior.prior.values.graph.sampler.values.sub_graph.avg_degree]
+_distribution_ = "log_uniform"
+min = 1.8
+max = 2.6
+_runtime_ = true
+
+[base_config.prior.prior.values.graph.sampler.values.sub_graph.sampler]
+_distribution_ = "choice"
+_runtime_ = true
+
+[[base_config.prior.prior.values.graph.sampler.values.sub_graph.sampler.values]]
+_type_ = "molecule-skeleton"
+heavy_atom_fraction = 0.42
+min_ring_size = 3
+max_ring_size = 7
+compute_distances = true
+bond_order_aware_distances = true
+
+[base_config.prior.prior.values.scm]
+_type_ = "gnn"
+
+[base_config.prior.prior.values.scm.base]
+_type_ = "mlp"
+
+[base_config.prior.prior.values.scm.base.n_features]
+_distribution_ = "uniform_int"
+_shared_ = true
+min = 4
+max = 100
+
+[base_config.prior.prior.values.scm.base.n_causes]
+_distribution_ = "meta_trunc_norm_log_scaled"
+min_mean = 1
+max_mean = 12
+min_std = 0.01
+max_std = 1.0
+lower_bound = 1
+round = true
+
+[base_config.prior.prior.values.scm.base.n_layers]
+_distribution_ = "meta_trunc_norm_log_scaled"
+min_mean = 1
+max_mean = 6
+min_std = 0.01
+max_std = 1.0
+lower_bound = 2
+round = true
+
+[base_config.prior.prior.values.scm.base.hidden_dim]
+_distribution_ = "meta_trunc_norm_log_scaled"
+min_mean = 5
+max_mean = 130
+min_std = 0.01
+max_std = 1.0
+lower_bound = 4
+round = true
+
+[base_config.prior.prior.values.scm.base.activation_type]
+_distribution_ = "choice"
+values = [
+    "tanh",
+    "leaky_relu",
+    "elu",
+    "identity",
+    "selu",
+    "silu",
+    "relu",
+    "softplus",
+    "relu6",
+    "hardtanh",
+    "sign",
+    "rbf",
+    "exp",
+    "sqrt_abs",
+    "unit_interval_indicator",
+    "sine",
+    "square",
+    "abs",
+    "random_fourier",
+]
+
+[base_config.prior.prior.values.scm.base.activation_type._runtime_]
+_distribution_ = "bernoulli"
+p = 0.5
+
+[base_config.prior.prior.values.scm.base.activation_type.weights]
+random_fourier = 10.0
+
+[base_config.prior.prior.values.scm.base.causes.strategy]
+_distribution_ = "choice"
+values = [
+    "normal",
+    "mixed",
+    "uniform",
+]
+
+[base_config.prior.prior.values.scm.base.causes.pre_sample_stats]
+_distribution_ = "choice"
+values = [
+    true,
+    false,
+]
+
+[base_config.prior.prior.values.scm.base.noise.std]
+_distribution_ = "meta_trunc_norm_log_scaled"
+min_mean = 0.0001
+max_mean = 0.3
+min_std = 0.01
+max_std = 1.0
+lower_bound = 0.0
+round = false
+
+[base_config.prior.prior.values.scm.base.noise.pre_sample_std]
+_distribution_ = "choice"
+values = [
+    true,
+    false,
+]
+
+[base_config.prior.prior.values.scm.base.init]
+scale_std_by_dropout = true
+
+[base_config.prior.prior.values.scm.base.init.std]
+_distribution_ = "meta_trunc_norm_log_scaled"
+min_mean = 0.01
+max_mean = 10.0
+min_std = 0.01
+max_std = 1.0
+lower_bound = 0.0
+round = false
+
+[base_config.prior.prior.values.scm.base.init.block_wise_dropout]
+_distribution_ = "choice"
+values = [
+    true,
+    false,
+]
+
+[base_config.prior.prior.values.scm.base.init.p_dropout]
+_distribution_ = "meta_beta"
+scale = 0.9
+min = 0.1
+max = 5.0
+
+[base_config.prior.prior.values.scm.base.causal.enabled]
+_distribution_ = "choice"
+values = [
+    true,
+    false,
+]
+
+[base_config.prior.prior.values.scm.base.causal.y_is_effect]
+_distribution_ = "choice"
+values = [
+    true,
+    false,
+]
+
+[base_config.prior.prior.values.scm.base.causal.in_clique]
+_distribution_ = "choice"
+values = [
+    true,
+    false,
+]
+
+[base_config.prior.prior.values.scm.base.causal.sort_features]
+_distribution_ = "choice"
+values = [
+    true,
+    false,
+]
+
+# Pinned (single-value "choice") for the same reason as the reference
+# config: every dataset's graph-conv layers go through GeometricConv with
+# full graph_conv_ratio, so labels/features are maximally and uniformly
+# bond-distance-dependent -- see the reference config's longer comment.
+[base_config.prior.prior.values.scm.conv_type]
+_distribution_ = "choice"
+values = [
+    "geometric-rbf",
+]
+
+[base_config.prior.prior.values.scm.graph_conv_ratio]
+_distribution_ = "choice"
+values = [
+    1.0,
+]
+
+[base_config.prior.prior.values.scm.structural]
+lappe_k = 0
+
+[base_config.prior.prior.values.scm.structural.use_degree]
+_distribution_ = "choice"
+values = [
+    true,
+    false,
+]
+
+[base_config.prior.prior.values.scm.structural.use_pagerank]
+_distribution_ = "choice"
+values = [
+    true,
+    false,
+]
+
+[base_config.prior.prior.values.postprocessing]
+p_cat = 0.2
+max_categories = 256
+permute_features = true
+
+[base_config.prior.prior.values.train_ratio]
+_distribution_ = "uniform"
+min = 0.05
+max = 0.5
+_shared_ = true
