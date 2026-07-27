@@ -230,4 +230,6 @@ local/*
 
 
 *.out
-*.sh
+*.shMole-BERT/
+graphpfn/
+Mole-BERT/
