@@ -1,31 +1,30 @@
-"""Standalone diagnostic for the pattern seen while training
-limix_backbone_gnn_pooling_multi_dataset_multi_agg_pooler_fit_test.py: some
-held-out sage-min datasets stayed stuck near R2~0 while a similarly-sized
-sage-min dataset (and everything else) improved fine. That training script's
-own held-out eval only has N_EVAL_DATASETS=8 datasets total, split by CHANCE
-across 5 conv_types -- nowhere near enough to tell "min/max aggregation
-systematically gets harder as molecule count grows" (an info-theoretic
-property: the min of N roughly-independent atom causes drifts into the
-extreme tail and carries less information about the whole set as N grows,
-unlike the mean) apart from "a couple of the 8 fixed draws just happened to
-be hard instances."
+"""Same diagnostic as dev/diagnose_conv_type_size_r2.py, but for checkpoints
+trained by
+limix_backbone_gnn_pooling_multi_dataset_multi_view_pooler_fit_test.py (the
+MultiViewPool architecture, which stops collapsing mean/min/max/attention
+pooling into one embedding and instead emits them as separate groups for the
+frozen backbone's own cross-group attention to select among -- see that
+script's module docstring). The two checkpoints are NOT interchangeable:
+this file's PoolingGNN/MultiViewPool must match
+limix_backbone_gnn_pooling_multi_dataset_multi_view_pooler_fit_test.py
+exactly (state_dict shapes differ from the multi_agg_pooler/MultiAggregatorPool
+version diagnose_conv_type_size_r2.py loads).
 
-This script does NOT train anything -- it loads an already-trained
-PoolingGNN checkpoint (pooler_ema weights) and runs it, read-only, on many
-freshly sampled held-out datasets PER conv_type, with conv_type FORCED
-(not left to chance) and molecule count spread across the full
-[--min-molecules, --max-molecules] range. That gives, for each conv_type
-separately, a real R2-vs-n_molecules trend instead of 1-3 anecdotal points.
+Loads an already-trained PoolingGNN checkpoint (pooler_ema weights) and runs
+it, read-only, on many freshly sampled held-out datasets PER conv_type, with
+conv_type FORCED (not left to chance) and molecule count spread across the
+full [--min-molecules, --max-molecules] range -- giving, for each conv_type
+separately, a real R2-vs-n_molecules trend instead of the training script's
+own small (N_EVAL_DATASETS=8), by-chance-split held-out set.
 
 All held-out datasets here use a seed range (--seed-base, default 1_000_000)
-disjoint from both the training draws (bin/graphpfn/pretrain.py-style
-per-rank seeds) and the training script's own tracked eval set
-(EVAL_SEED_BASE=10_000) -- this is a separate, one-off analysis, not part of
-the tracked training metric.
+disjoint from both the training draws and the training script's own tracked
+eval set (EVAL_SEED_BASE=10_000) -- this is a separate, one-off analysis, not
+part of the tracked training metric.
 
 Usage:
-    python dev/diagnose_conv_type_size_r2.py \\
-        --checkpoint-path dev/output/limix_backbone_gnn_pooling_multi_dataset_multi_agg_pooler_fit_test/molecules_1000_3000_n_steps_10000_lr_0.003/pooler_checkpoint.pt \\
+    python dev/diagnose_conv_type_size_r2_multi_view_pooler.py \\
+        --checkpoint-path dev/output/limix_backbone_gnn_pooling_multi_dataset_multi_view_pooler_fit_test/molecules_1000_3000_n_steps_10000_lr_0.003/pooler_checkpoint.pt \\
         --min-molecules 500 --max-molecules 4000 --n-samples-per-conv-type 25 --n-workers 8
 (Single-process, single-GPU-or-CPU -- no torchrun needed, this is read-only
 inference over a fixed checkpoint, not a training job.)
@@ -66,11 +65,12 @@ TRAIN_FRACTION = 0.8
 CONV_TYPES = ["gcn", "sage-mean", "sage-min", "sage-max", "gt"]
 
 # Must match the architecture the checkpoint was actually trained with (see
-# limix_backbone_gnn_pooling_multi_dataset_multi_agg_pooler_fit_test.py) --
+# limix_backbone_gnn_pooling_multi_dataset_multi_view_pooler_fit_test.py) --
 # these aren't guessed, loading will fail loudly (state_dict shape mismatch)
 # if they're wrong.
 N_GNN_LAYERS = 3
 N_ATTN_HEADS = 4
+N_POOL_VIEWS = 4  # mean, min, max, learned-attention -- see MultiViewPool
 DROPOUT = 0.0
 EMA_DECAY = 0.98  # unused for inference (never updated further), just needed to construct AveragedModel
 
@@ -135,8 +135,10 @@ class MultiAggregatorConv(nn.Module):
     """Per-layer message passing combining mean/min/max neighbor reductions
     with a lightweight multi-head dot-product attention aggregation,
     concatenated and projected back to d_out. Copied verbatim from
-    limix_backbone_gnn_pooling_multi_dataset_multi_agg_pooler_fit_test.py --
-    must match exactly for the checkpoint's state_dict to load.
+    limix_backbone_gnn_pooling_multi_dataset_multi_view_pooler_fit_test.py --
+    must match exactly for the checkpoint's state_dict to load. Unlike the
+    readout (MultiViewPool below), this per-layer step still combines
+    branches -- see that script's module docstring for why.
     """
 
     def __init__(self, d_in: int, d_out: int, n_heads: int = 1):
@@ -178,26 +180,45 @@ def _scatter_pool(atom_out: torch.Tensor, molecule_id: torch.Tensor, n_molecules
     return out.scatter_reduce(0, index, atom_out, reduce=reduce, include_self=False)
 
 
-class MultiAggregatorPool(nn.Module):
-    """Atom->molecule readout combining mean/min/max pooling. Copied
-    verbatim from the training script -- see its docstring.
+class MultiViewPool(nn.Module):
+    """Atom->molecule readout emitting mean/min/max/attention pooling as
+    SEPARATE groups instead of collapsing them into one embedding. Copied
+    verbatim from
+    limix_backbone_gnn_pooling_multi_dataset_multi_view_pooler_fit_test.py --
+    must match exactly for the checkpoint's state_dict to load.
     """
 
     def __init__(self, embed_dim: int):
         super().__init__()
-        self.combine = nn.Linear(embed_dim * 3, embed_dim)
+        self.attn_score = nn.Linear(embed_dim, 1)
 
     def forward(self, atom_out: torch.Tensor, molecule_id: torch.Tensor, n_molecules: int) -> torch.Tensor:
         mean_pool = _scatter_pool(atom_out, molecule_id, n_molecules, reduce="mean", init_value=0.0)
         min_pool = _scatter_pool(atom_out, molecule_id, n_molecules, reduce="amin", init_value=float("inf"))
         max_pool = _scatter_pool(atom_out, molecule_id, n_molecules, reduce="amax", init_value=float("-inf"))
-        combined = torch.cat([mean_pool, min_pool, max_pool], dim=-1)
-        return self.combine(combined)
+        attn_pool = self._attention_pool(atom_out, molecule_id, n_molecules)
+        return torch.stack([mean_pool, min_pool, max_pool, attn_pool], dim=1)  # (n_molecules, N_POOL_VIEWS, embed_dim)
+
+    def _attention_pool(self, atom_out: torch.Tensor, molecule_id: torch.Tensor, n_molecules: int) -> torch.Tensor:
+        device, dtype = atom_out.device, atom_out.dtype
+        scores = self.attn_score(atom_out).squeeze(-1)  # (n_atoms,)
+
+        scores_max = torch.full((n_molecules,), float("-inf"), device=device, dtype=dtype).scatter_reduce(
+            0, molecule_id, scores, reduce="amax", include_self=False
+        )
+        shifted = (scores - scores_max[molecule_id]).exp()
+        denom = torch.zeros(n_molecules, device=device, dtype=dtype).index_add(0, molecule_id, shifted).clamp(min=1e-12)
+        weights = shifted / denom[molecule_id]
+
+        weighted = atom_out * weights.unsqueeze(-1)
+        return torch.zeros(n_molecules, atom_out.shape[-1], device=device, dtype=dtype).index_add(0, molecule_id, weighted)
 
 
 class PoolingGNN(nn.Module):
     """Identical architecture to the training script's PoolingGNN -- must
     match exactly for pooler_checkpoint.pt's state_dict to load correctly.
+    The readout expands each input group into N_POOL_VIEWS separate groups
+    (n_groups -> n_groups * N_POOL_VIEWS) instead of collapsing back to one.
     """
 
     def __init__(self, embed_dim: int, n_layers: int, dropout: float, n_heads: int = 1):
@@ -207,7 +228,7 @@ class PoolingGNN(nn.Module):
         )
         self.norms = nn.ModuleList(nn.LayerNorm(embed_dim) for _ in range(n_layers))
         self.dropout = nn.Dropout(dropout)
-        self.pool = MultiAggregatorPool(embed_dim)
+        self.pool = MultiViewPool(embed_dim)
 
     def forward(
         self,
@@ -219,13 +240,15 @@ class PoolingGNN(nn.Module):
         n_atoms, n_groups, embed_dim = atom_embeddings_grouped.shape
         dtype = atom_embeddings_grouped.dtype
 
-        pooled_per_group = []
+        pooled_views_per_group = []
         for g in range(n_groups):
             h = atom_embeddings_grouped[:, g, :].float()
             for conv, norm in zip(self.convs, self.norms):
                 h = self.dropout(F.relu(norm(conv(graph, h))))
-            pooled_per_group.append(self.pool(h, molecule_id, n_molecules))
-        pooled = torch.stack(pooled_per_group, dim=1)
+            pooled_views_per_group.append(self.pool(h, molecule_id, n_molecules))
+
+        pooled = torch.stack(pooled_views_per_group, dim=1)  # (n_molecules, n_groups, N_POOL_VIEWS, embed_dim)
+        pooled = pooled.reshape(n_molecules, n_groups * N_POOL_VIEWS, embed_dim)
         return pooled.to(dtype)
 
 

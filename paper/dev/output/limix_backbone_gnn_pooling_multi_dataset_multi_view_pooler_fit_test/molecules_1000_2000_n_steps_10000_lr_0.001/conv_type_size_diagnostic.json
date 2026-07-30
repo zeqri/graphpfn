@@ -1,0 +1,627 @@
+[
+  {
+    "conv_type": "gcn",
+    "n_molecules": 1209,
+    "r2": 0.8219664692878723
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 1559,
+    "r2": 0.7936859726905823
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 836,
+    "r2": 0.9122384786605835
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 872,
+    "r2": 0.8432483077049255
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 522,
+    "r2": 0.5154398679733276
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 851,
+    "r2": 0.5465652942657471
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 940,
+    "r2": 0.5116916298866272
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 866,
+    "r2": 0.7111124992370605
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 806,
+    "r2": 0.316305935382843
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 1281,
+    "r2": 0.6913894414901733
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 908,
+    "r2": 0.2308087944984436
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 1962,
+    "r2": 0.7792390584945679
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 1874,
+    "r2": 0.8768261671066284
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 629,
+    "r2": 0.4629679322242737
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 927,
+    "r2": 0.7929988503456116
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 618,
+    "r2": 0.5374944806098938
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 968,
+    "r2": 0.5615730881690979
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 541,
+    "r2": 0.716400682926178
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 936,
+    "r2": 0.7325031757354736
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 858,
+    "r2": 0.7985250353813171
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 1098,
+    "r2": 0.6057404279708862
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 754,
+    "r2": 0.7823073267936707
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 609,
+    "r2": 0.839715301990509
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 1095,
+    "r2": 0.7475534081459045
+  },
+  {
+    "conv_type": "gcn",
+    "n_molecules": 661,
+    "r2": 0.3195815682411194
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 734,
+    "r2": 0.40429913997650146
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 1876,
+    "r2": 0.9236232042312622
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 1295,
+    "r2": 0.7788397073745728
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 672,
+    "r2": 0.3487897515296936
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 1371,
+    "r2": 0.5015628337860107
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 981,
+    "r2": 0.4511911869049072
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 1416,
+    "r2": 0.506672203540802
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 860,
+    "r2": 0.28218919038772583
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 898,
+    "r2": 0.5788499116897583
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 1447,
+    "r2": 0.5040286779403687
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 922,
+    "r2": 0.46137458086013794
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 1257,
+    "r2": 0.6153150796890259
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 674,
+    "r2": 0.44161683320999146
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 1398,
+    "r2": 0.7078498601913452
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 1949,
+    "r2": 0.7846798300743103
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 1541,
+    "r2": 0.045320987701416016
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 946,
+    "r2": 0.8124085068702698
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 664,
+    "r2": 0.5331003069877625
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 1529,
+    "r2": 0.8068506717681885
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 541,
+    "r2": 0.8116098642349243
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 1691,
+    "r2": 0.9441642761230469
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 733,
+    "r2": 0.3964306712150574
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 1778,
+    "r2": 0.632943332195282
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 740,
+    "r2": 0.23898166418075562
+  },
+  {
+    "conv_type": "sage-mean",
+    "n_molecules": 846,
+    "r2": 0.7837477922439575
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 1959,
+    "r2": 0.23728132247924805
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 688,
+    "r2": 0.19424349069595337
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 504,
+    "r2": 0.015873849391937256
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 926,
+    "r2": 0.26039838790893555
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 685,
+    "r2": 0.08138614892959595
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 536,
+    "r2": -0.02133190631866455
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 835,
+    "r2": 0.11875569820404053
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 971,
+    "r2": 0.034607529640197754
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 1644,
+    "r2": 0.31473690271377563
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 867,
+    "r2": 0.3131175637245178
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 1643,
+    "r2": 0.03721076250076294
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 1530,
+    "r2": 0.11715799570083618
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 607,
+    "r2": 0.014407098293304443
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 605,
+    "r2": -0.017613887786865234
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 1507,
+    "r2": 0.09553182125091553
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 557,
+    "r2": 0.07996022701263428
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 1890,
+    "r2": 0.1450597047805786
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 1142,
+    "r2": 0.20690739154815674
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 602,
+    "r2": 0.04982483386993408
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 864,
+    "r2": -0.025407910346984863
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 650,
+    "r2": 0.08386576175689697
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 1599,
+    "r2": 0.2079508900642395
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 1640,
+    "r2": 0.25676679611206055
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 606,
+    "r2": 0.020131826400756836
+  },
+  {
+    "conv_type": "sage-min",
+    "n_molecules": 851,
+    "r2": 0.06159704923629761
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 1689,
+    "r2": -0.004988312721252441
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 1402,
+    "r2": 0.25449973344802856
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 1696,
+    "r2": 0.10551553964614868
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 655,
+    "r2": 0.20532619953155518
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 516,
+    "r2": 0.16266685724258423
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 884,
+    "r2": 0.23256075382232666
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 1518,
+    "r2": 0.06670540571212769
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 636,
+    "r2": -0.0002225637435913086
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 1306,
+    "r2": 0.2026737928390503
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 784,
+    "r2": 0.1592962145805359
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 1528,
+    "r2": 0.1896423101425171
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 820,
+    "r2": 0.16869455575942993
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 764,
+    "r2": 0.05719184875488281
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 1531,
+    "r2": 0.20368456840515137
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 589,
+    "r2": 0.06019490957260132
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 589,
+    "r2": 0.06536507606506348
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 1365,
+    "r2": 0.05695295333862305
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 1447,
+    "r2": 0.06743788719177246
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 912,
+    "r2": 0.06092500686645508
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 1357,
+    "r2": -0.0024955272674560547
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 1774,
+    "r2": 0.08161073923110962
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 667,
+    "r2": 0.11026465892791748
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 768,
+    "r2": 0.009295821189880371
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 1522,
+    "r2": 0.020644724369049072
+  },
+  {
+    "conv_type": "sage-max",
+    "n_molecules": 959,
+    "r2": 0.09861123561859131
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1329,
+    "r2": 0.048612892627716064
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1104,
+    "r2": 0.0053359270095825195
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 960,
+    "r2": -0.005433320999145508
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 647,
+    "r2": 0.014137208461761475
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1464,
+    "r2": 0.06951272487640381
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 969,
+    "r2": 0.038605570793151855
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1769,
+    "r2": 0.04155761003494263
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1423,
+    "r2": -0.041799068450927734
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1489,
+    "r2": 0.01698935031890869
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1684,
+    "r2": 0.05446326732635498
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 879,
+    "r2": 0.003768324851989746
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1520,
+    "r2": 0.07082396745681763
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1943,
+    "r2": 0.02847975492477417
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1697,
+    "r2": 0.0044637322425842285
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 872,
+    "r2": 0.019300222396850586
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1374,
+    "r2": 0.02752673625946045
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 533,
+    "r2": -0.12683868408203125
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 906,
+    "r2": -0.07516169548034668
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 517,
+    "r2": -0.007810115814208984
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1374,
+    "r2": 0.026095211505889893
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1000,
+    "r2": 0.017151296138763428
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 980,
+    "r2": 0.027448832988739014
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1121,
+    "r2": -0.039999961853027344
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1126,
+    "r2": -0.020344018936157227
+  },
+  {
+    "conv_type": "gt",
+    "n_molecules": 1409,
+    "r2": -0.03198671340942383
+  }
+]
