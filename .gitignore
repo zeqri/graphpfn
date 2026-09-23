@@ -241,3 +241,7 @@ Mole-BERT/
 !/datasets/aqsol/
 /datasets/aqsol/*
 !/datasets/aqsol/data_curated.csv
+# moleculenet: only the split/ dirs
+!/datasets/moleculenet/
+/datasets/moleculenet/*/*
+!/datasets/moleculenet/*/split/
