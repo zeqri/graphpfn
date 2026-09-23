@@ -13,6 +13,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+sh/files
 downloads/
 eggs/
 .eggs/
@@ -26,7 +27,8 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
+MANIFEST 
+embeddings/
 
 # PyInstaller
 #   Usually these files are written by a python script from a template
@@ -233,3 +235,9 @@ local/*
 *.shMole-BERT/
 graphpfn/
 Mole-BERT/
+
+# datasets: ignore everything except the curated AqSol CSV
+/datasets/*
+!/datasets/aqsol/
+/datasets/aqsol/*
+!/datasets/aqsol/data_curated.csv

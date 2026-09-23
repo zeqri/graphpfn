@@ -14,9 +14,10 @@ def get_structural_feature_count(
     use_degree: bool,
     use_pagerank: bool,
     lappe_k: int,
+    use_distance: bool = False,
 ) -> int:
     """Return the number of structural features that will be computed."""
-    return int(use_degree) + int(use_pagerank) + lappe_k
+    return int(use_degree) + int(use_pagerank) + lappe_k + int(use_distance)
 
 
 def compute_structural_features(
@@ -24,16 +25,19 @@ def compute_structural_features(
     use_degree: bool,
     use_pagerank: bool,
     lappe_k: int,
+    use_distance: bool = False,
 ) -> torch.Tensor | None:
     """Compute structural features from graph topology.
 
-    Features are concatenated in order: degree, pagerank, lappe (if enabled).
+    Features are concatenated in order: degree, pagerank, lappe, distance (if enabled).
 
     Args:
         graph: Input graph
         use_degree: Include normalized degree features
         use_pagerank: Include PageRank scores
         lappe_k: Number of Laplacian eigenvectors (0 = disabled)
+        use_distance: Include mean incident-edge geometric distance (requires
+            graph.edata["distance"] -- see compute_distance_features)
 
     Returns:
         Tensor of shape (n_nodes, n_structural_features) or None if all disabled
@@ -48,6 +52,9 @@ def compute_structural_features(
 
     if lappe_k > 0:
         features.append(compute_lappe_features(graph, lappe_k))
+
+    if use_distance:
+        features.append(compute_distance_features(graph))
 
     if not features:
         return None
@@ -105,6 +112,28 @@ def compute_pagerank_features(
 
     pv = torch.log(tol + pv)
     return pv.unsqueeze(-1)
+
+
+def compute_distance_features(graph: dgl.DGLGraph) -> torch.Tensor:
+    """Compute per-node mean incident-edge geometric distance (log1p-scaled, mirroring
+    compute_degree_features' own log-normalization convention) -- the geometric analogue of
+    degree: not just how many neighbors a node has, but how far away they typically are.
+
+    Requires graph.edata["distance"] (set by a geometric graph sampler/pipeline, e.g.
+    dev_geometric's _install_knn_sampler) -- every other current sampler leaves edges
+    undistanced, so use_distance should only be enabled alongside such a sampler.
+
+    Args:
+        graph: Input graph, must carry edata["distance"]
+
+    Returns:
+        Tensor of shape (n_nodes, 1)
+    """
+    distance = graph.edata["distance"]
+    dist_sum = dgl.ops.copy_e_sum(graph, distance)
+    in_degrees = graph.in_degrees().float().clamp(min=1.0)
+    mean_distance = dist_sum / in_degrees
+    return torch.log1p(mean_distance).unsqueeze(-1)
 
 
 def compute_lappe_features(graph: dgl.DGLGraph, k: int) -> torch.Tensor:

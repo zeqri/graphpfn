@@ -306,6 +306,7 @@ class StructuralConfig(TypedDict):
     use_degree: bool
     use_pagerank: bool
     lappe_k: int
+    use_distance: NotRequired[bool]
 
 
 # SCM configs (discriminated by _type_)
@@ -329,7 +330,7 @@ class GNNSCMConfig(TypedDict):
 
     _type_: Literal["gnn"]
     base: MLPSCMConfig
-    conv_type: Literal["gcn", "sage-mean", "sage-min", "sage-max", "gt"]
+    conv_type: Literal["gcn", "sage-mean", "sage-min", "sage-max", "gt", "geometric"]
     graph_conv_ratio: float
     structural: StructuralConfig
 
