@@ -1,19 +1,19 @@
-"""Download + process the datasets the evaluation scripts use. Run ONCE on a machine with internet
-(e.g. a login node) before submitting jobs -- compute nodes have none, and torch_geometric otherwise
-tries to download a missing dataset at load time.
+"""Download + process the datasets the training, evaluation and embedding scripts use. Run it once,
+before make_scaffold_splits.py.
 
   * MoleculeNet (bace, bbbp, clintox, esol, freesolv, lipo, sider) -> <root>/moleculenet/<name>/{raw,processed}
   * ZINC-12k (subset=True; train / val / test)                        -> <root>/zinc/{raw,subset/processed}
   * AQSOL (train / val / test)                                        -> <root>/aqsol/{raw,processed}
 
-<root> defaults to this directory (<repo>/datasets), which is where the evaluation scripts look.
+<root> defaults to this directory (<repo>/datasets), which is where the other scripts look.
 Datasets already on disk are loaded, not re-downloaded. Everything runs sequentially, so no two
-processes race on the same directory. NOT downloaded here: the scaffold splits
-(moleculenet/<name>/split/scaffold_split.json) and aqsol/data_curated.csv, which ship with the repo.
+processes race on the same directory. NOT downloaded here: aqsol/data_curated.csv, which ships with
+the repo. The scaffold splits are built from the downloaded CSVs by make_scaffold_splits.py.
 
-After downloading, each MoleculeNet CSV's row count is checked against every embedding model's
-<dataset>_meta.json "shape" -- the embeddings' split_idx index rows of the CSV they were computed
-from, so a mismatch means the downloaded CSV is not that file.
+After downloading, each MoleculeNet raw CSV's sha256 is checked against EXPECTED_CSV_SHA256, the files
+the paper's splits and results were computed from. The scaffold split indices are rows of that exact
+file, so a different CSV (e.g. an upstream re-release with a row added or reordered) would give
+different splits and results.
 
 Usage:
     python download_datasets.py                                   # everything, into this directory
@@ -24,15 +24,25 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
+import hashlib
 from pathlib import Path
 
 from torch_geometric.datasets import AQSOL, ZINC, MoleculeNet
 
 DATASETS_DIR = Path(__file__).resolve().parent
-REPO_DIR = DATASETS_DIR.parent
 MOLECULENET = ["bace", "bbbp", "clintox", "esol", "freesolv", "lipo", "sider"]
 ALL_DATASETS = [*MOLECULENET, "zinc", "aqsol"]
+
+# sha256 of each MoleculeNet raw CSV the paper's scaffold splits and embeddings were computed from.
+EXPECTED_CSV_SHA256 = {
+    "bace": "f3fb9ce90bada3e2bd6148b0df13f8f8145a357bf87df0dd5b391ede974fc737",
+    "bbbp": "d07a38487aeac5cee5508413e468043ef3097451d2a112701c2d60be9ec6b662",
+    "clintox": "9999816e760dd838358b5d88e81cea2fc062be4458ffa412ceecdba4f88a67b6",
+    "esol": "8c06a76f0c6487d29ab0f903e6a7a7139f189ab3c1178f159c8be8964602f189",
+    "freesolv": "ab5895d914ee87cb563bd7b9611e869527bba45bec6b014d34dc495a0f9dcb72",
+    "lipo": "aed41590cb30609d51d8e08ad3ff06495a76e80e211358801f596b10da69bacd",
+    "sider": "71efc6ac4ca82d6545bc512509863281be0f17234afd7adaf71a71899988302e",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,30 +51,18 @@ def parse_args() -> argparse.Namespace:
                         help="Which datasets to download (default: all).")
     parser.add_argument("--root", type=Path, default=DATASETS_DIR,
                         help="Where to save them; holds moleculenet/, zinc/, aqsol/ (default: %(default)s).")
-    parser.add_argument("--embeddings-root", type=Path, default=REPO_DIR / "embeddings",
-                        help="Root holding <model>/<dataset>/<dataset>_meta.json, for the row-count check "
-                        "(default: %(default)s).")
     return parser.parse_args()
 
 
-def csv_row_count(path: Path) -> int:
-    """Data rows the way MoleculeNet.process counts them: non-empty lines after the header."""
-    with open(path) as f:
-        return len([x for x in f.read().split("\n")[1:-1] if len(x) > 0])
-
-
-def check_against_embeddings(ds: MoleculeNet, name: str, embeddings_root: Path) -> bool:
-    """True iff the raw CSV has as many rows as every embedding meta's "shape"[0]."""
-    n_rows = csv_row_count(Path(ds.raw_paths[0]))
-    ok = True
-    for meta_path in sorted(embeddings_root.glob(f"*/{name}/{name}_meta.json")):
-        expected = json.loads(meta_path.read_text())["shape"][0]
-        if n_rows != expected:
-            print(f"  [MISMATCH] {ds.raw_paths[0]} has {n_rows} rows, {meta_path} expects {expected}")
-            ok = False
-    if ok:
-        print(f"  CSV rows = {n_rows}, consistent with the embeddings' meta")
-    return ok
+def check_csv_sha256(ds: MoleculeNet, name: str) -> bool:
+    """True iff the raw CSV is byte-identical to the one the paper used."""
+    path = Path(ds.raw_paths[0])
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != EXPECTED_CSV_SHA256[name]:
+        print(f"  [MISMATCH] {path} has sha256 {digest[:12]}..., expected {EXPECTED_CSV_SHA256[name][:12]}...")
+        return False
+    print(f"  sha256 {digest[:12]}... matches the paper's CSV")
+    return True
 
 
 def main() -> None:
@@ -77,7 +75,7 @@ def main() -> None:
         if name in MOLECULENET:
             ds = MoleculeNet(root=str(root / "moleculenet"), name=name)
             print(f"  {len(ds)} molecules in {root / 'moleculenet' / name}")
-            all_ok &= check_against_embeddings(ds, name, args.embeddings_root)
+            all_ok &= check_csv_sha256(ds, name)
         elif name == "zinc":
             for split in ("train", "val", "test"):
                 ds = ZINC(root=str(root / "zinc"), subset=True, split=split)
@@ -89,7 +87,7 @@ def main() -> None:
             if not (root / "aqsol" / "data_curated.csv").exists():
                 print(f"  [warn] {root / 'aqsol' / 'data_curated.csv'} missing -- eval_aqsol.py needs it for atom features")
 
-    print("\nDone." if all_ok else "\nDone, but some MoleculeNet CSVs do not match the embeddings (see [MISMATCH] above).")
+    print("\nDone." if all_ok else "\nDone, but some MoleculeNet CSVs differ from the paper's (see [MISMATCH] above).")
     if not all_ok:
         raise SystemExit(1)
 
