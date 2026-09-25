@@ -291,7 +291,7 @@ Neither the TabPFN code nor its weights are included in this repository. Both ar
 ```bash
 python3.12 -m venv tabpfn_env
 source tabpfn_env/bin/activate
-pip install "tabpfn==<VERSION>" numpy scikit-learn
+pip install tabpfn numpy scikit-learn
 ```
 
 **2. Get the TabPFN v3 checkpoints** (`tabpfn-v3-classifier-v3_default.ckpt` and `tabpfn-v3-regressor-v3_default.ckpt`) from the gated Hugging Face repository `Prior-Labs/tabpfn_3`. The script reads them from `paper/checkpoints/tabpfnv3/`. If they are not there, `tabpfn` downloads them to that folder the first time you run the script. The first download needs a one-time license acceptance (browser login; the token is stored under `~/.cache/tabpfn`). To keep the checkpoints somewhere else, pass `--checkpoint-dir DIR`.
