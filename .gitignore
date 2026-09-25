@@ -235,8 +235,10 @@ local/*
 graphpfn/
 Mole-BERT/
 
-# datasets: ignore everything except the curated AqSol CSV
+# datasets: ignore everything except the curated AqSol CSV and the dataset scripts
 /datasets/*
+!/datasets/download_datasets.py
+!/datasets/make_scaffold_splits.py
 !/datasets/aqsol/
 /datasets/aqsol/*
 !/datasets/aqsol/data_curated.csv
