@@ -298,9 +298,12 @@ pip install "tabpfn==<VERSION>" numpy scikit-learn
 
 **2. Get the TabPFN v3 checkpoints** (`tabpfn-v3-classifier-v3_default.ckpt` and `tabpfn-v3-regressor-v3_default.ckpt`) from the gated Hugging Face repository `Prior-Labs/tabpfn_3`. The script reads them from `paper/checkpoints/tabpfnv3/`. If they are not there, `tabpfn` downloads them to that folder the first time you run the script. The first download needs a one-time license acceptance (browser login; the token is stored under `~/.cache/tabpfn`). To keep the checkpoints somewhere else, pass `--checkpoint-dir DIR`.
 
-**3. Run it:**
+**3. Run it in `tabpfn_env`:**
 
 ```bash
+deactivate 2>/dev/null           # leave the MolPFN venv if it is active
+source tabpfn_env/bin/activate
+
 cd paper/dev_prior_final/evaluation/TabPFNv3
 
 # Classification
@@ -319,13 +322,13 @@ python eval_tabpfnv3.py --dataset aqsol    --embedding-model Molbert
 
 Replace `Molbert` with `MolDeBERTa` to use the other embeddings. Use `--tabpfn-seed` to set TabPFN's `random_state` (default 0). `--n-estimators` defaults to 8, not v3's `"auto"`, to match TabICL. Results are written to `paper/dev_prior_final/evaluation/TabPFNv3/outputs/<model>/tabpfnv3_<dataset>.json` unless `--output-json` is given.
 
-**Full sweep.** [`run_eval_tabpfnv3.sh`](paper/dev_prior_final/evaluation/TabPFNv3/run_eval_tabpfnv3.sh) runs every dataset with both embedding models and `--tabpfn-seed` 1–5, sequentially on one GPU. Set `TABPFN_CHECKPOINT_DIR` if the checkpoints are not in `paper/checkpoints/tabpfnv3/`, and `VENV` to activate the TabPFN environment first:
+**Full sweep.** [`run_eval_tabpfnv3.sh`](paper/dev_prior_final/evaluation/TabPFNv3/run_eval_tabpfnv3.sh) runs every dataset with both embedding models and `--tabpfn-seed` 1–5, sequentially on one GPU. Set `TABPFN_CHECKPOINT_DIR` if the checkpoints are not in `paper/checkpoints/tabpfnv3/`. The script does not choose an environment by itself: set `VENV` to your `tabpfn_env`, or activate `tabpfn_env` before running it. Otherwise it uses whatever `python` is active.
 
 ```bash
-bash paper/dev_prior_final/evaluation/TabPFNv3/run_eval_tabpfnv3.sh
+VENV=/path/to/tabpfn_env bash paper/dev_prior_final/evaluation/TabPFNv3/run_eval_tabpfnv3.sh
 
 # only ZINC and AQSOL
-DATASETS="zinc aqsol" bash paper/dev_prior_final/evaluation/TabPFNv3/run_eval_tabpfnv3.sh
+VENV=/path/to/tabpfn_env DATASETS="zinc aqsol" bash paper/dev_prior_final/evaluation/TabPFNv3/run_eval_tabpfnv3.sh
 ```
 
 `EMBEDDING_MODELS` and `SEEDS` narrow the sweep the same way. Results are written to `outputs/<model>/<dataset>/tabpfnv3.seed<seed>.json`.
