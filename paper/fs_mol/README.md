@@ -76,7 +76,17 @@ python -m torch.distributed.run --standalone --nproc_per_node=4 \
     train_graphpfn_pooler_on_fsmol_meta_train_x9_plus_extra_plus_fp.py --fp-fold 128
 ```
 
-Each optimizer step accumulates gradients over 20 episodes. An episode samples one training task, splits it into a stratified support and query set, and trains on the query loss. Every 200 steps the EMA weights are scored on the 40 validation tasks, and the best delta-AUPRC at support size 16 is kept.
+Each optimizer step accumulates gradients over 20 episodes per GPU. An episode samples one training task, splits it into a stratified support and query set, and trains on the query loss. Every 200 steps the EMA weights are scored on the 40 validation tasks, and the best delta-AUPRC at support size 16 is kept.
+
+**The reported checkpoints were trained on 4 GPUs**, so each optimizer step averaged 80 episodes. A single-GPU run sees 20 episodes per step instead, so its results will differ; to match the 4-GPU setup on one GPU, pass `--grad-accum-steps 80` (each step then takes about 4 times as long).
+
+**The reported runs stopped before the 20,000-step default**, on a 12-hour job time limit, not by early stopping. A run with the commands above continues to 20,000 steps or until early stopping, so it can end with a different best checkpoint:
+
+| Recipe | Last step | Best step (reported checkpoint) |
+|---|---|---|
+| `native_features` | 17,800 | 17,000 |
+| `native_features_plus_fp` | 16,400 | 14,000 |
+| `x9_plus_extra_plus_fp` | 10,200 | 10,200 |
 
 | Argument | Default | Meaning |
 |---|---|---|
@@ -84,7 +94,7 @@ Each optimizer step accumulates gradients over 20 episodes. An episode samples o
 | `--fp-fold` | 0 (no folding) | Fold the 2048-bit fingerprint to this width (fingerprint recipes only). **Evaluation must use the same value** |
 | `--lr` | 0.0001 | Peak learning rate (cosine schedule with warmup) |
 | `--n-steps` | 20000 | Total optimizer steps |
-| `--grad-accum-steps` | 20 | Episodes per optimizer step |
+| `--grad-accum-steps` | 20 | Episodes per optimizer step, per GPU |
 | `--support-sizes` | `16,32,64,128` | Support sizes to sample episodes at |
 | `--max-query` | 128 | Query molecules per episode. Lower it if training runs out of memory |
 | `--eval-every` / `--patience` | 200 / 25 | Steps between validation rounds / rounds without improvement before stopping early |

@@ -150,8 +150,6 @@ python dev_prior_final/train_pooler.py \
 
 Each optimizer step averages gradients over 20 synthetic datasets per GPU. A single-GPU run therefore sees 20 datasets per step instead of 80 on 4 GPUs, so its results will differ from the 4-GPU setup. To match it, set `N_GRADIENT_ACCUMULATION_STEPS = 80` in `train_pooler.py`; each step then takes about 4 times as long.
 
-[`paper/dev_prior_final/train.sh`](paper/dev_prior_final/train.sh) is an example SLURM script (4 GPUs, 6 h). Edit its `#SBATCH` account, the environment it activates and the `cd` path before you use it.
-
 | Argument | Default | Meaning |
 |---|---|---|
 | `--min-molecules` / `--max-molecules` | 300 / 3000 | Range for the number of molecules per synthetic training dataset (log-uniform) |
@@ -365,7 +363,6 @@ Use `--dataset` with one or more dataset names to run a subset, `--select-by` to
     ├── dev_prior_final/       # MolPFN
     │   ├── train_pooler.py    # pooler training on the synthetic molecule prior
     │   ├── prior_config.py    # base synthetic-molecule prior
-    │   ├── train.sh           # example SLURM training job
     │   └── evaluation/        # per-dataset evaluation scripts + run_eval.sh; TabICL/, TabPFNv3/ and KNN/ baselines
     ├── lib/                   # GraphPFN prior and model code (reused, with modifications)
     └── vendor/                # vendored LimiX, TabICL and TabPFN code
