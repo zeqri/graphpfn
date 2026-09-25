@@ -11,6 +11,7 @@ Only the pooler is trained; the LimiX-16M backbone stays frozen. Meta-training d
 | MolPFN environment | — | The `venv` from the top-level [Setup](../../README.md#setup) |
 | LimiX-16M backbone | `paper/checkpoints/LimiX-16M.ckpt` | Top-level [Setup](../../README.md#setup), step 2 |
 | Pretrained MolPFN pooler | `checkpoints/pooler_checkpoint_best.pt` | Included. Training starts from it, and the evaluators load it when `--pooler-checkpoint` is not given |
+| Meta-trained FS-Mol poolers (one per recipe) | `paper/fs_mol/checkpoints/` | Included. Or train your own ([section 1](#1-meta-train-the-pooler)) |
 | FS-Mol data | `datasets/fs-mol/` | See [Setup](#setup) below |
 | TabICL v2 / TabPFN v3 checkpoints (baselines only) | `paper/checkpoints/{tabicl,tabpfnv3}/` | Top-level [TabICL](../../README.md#3-tabicl-baseline) and [TabPFN v3](../../README.md#4-tabpfn-v3-baseline) sections |
 
@@ -114,8 +115,10 @@ A resumed run ignores `--pooler-checkpoint`. To start from a different checkpoin
 
 Each evaluator scores one checkpoint on all 157 test tasks. For the fingerprint recipes, pass the **same `--fp-fold` as in training** (the evaluator's default is 512) and add `--no-baseline`, which skips the fingerprint-free pass that the checkpoint was not trained for.
 
+The commands below evaluate the **released meta-trained checkpoints** in [`checkpoints/`](checkpoints/), one per recipe. To evaluate checkpoints you trained yourself, set `CKPT=output` instead; the folder names are the same.
+
 ```bash
-CKPT=$PWD/output
+CKPT=checkpoints
 
 # x9 + extra + fingerprint
 python evaluation/eval_graphpfn_pooler_on_fsmol_test_x9_features.py \
@@ -224,5 +227,6 @@ paper/fs_mol/
 │   ├── merge_<recipe>_shards.py                            # combine sharded evaluation results
 │   ├── LimiX/  TabICL/  TabPFNv3/                          # fingerprint baselines
 │   └── output/                                             # result JSONs
+├── checkpoints/                                       # released meta-trained poolers, one per recipe
 └── output/                                            # meta-training checkpoints (generated)
 ```

@@ -169,6 +169,8 @@ batched-metrics-*
 AutogluonModels
 events.out.tfevents.*
 checkpoints/*
+# released FS-Mol meta-trained poolers
+!fs_mol/checkpoints/**/pooler_checkpoint_best.pt
 
 # Experiments
 **/exp/**/*.*
