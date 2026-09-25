@@ -1,3 +1,7 @@
+# Modified for MolPFN (2026) from GraphPFN.
+# Changes: Pass configured training-fraction bounds to dataset checks.
+# See paper/LICENSE and paper/NOTICE at the repository root.
+
 """GraphPriorSampler: iterator yielding batches of synthetic graph datasets."""
 
 from collections.abc import Iterator

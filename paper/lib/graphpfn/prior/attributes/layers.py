@@ -1,3 +1,7 @@
+# Modified for MolPFN (2026) from GraphPFN.
+# Changes: Add geometric attention convolution with edge-distance bias.
+# See paper/LICENSE and paper/NOTICE at the repository root.
+
 """Graph convolution layers for GNN-based SCM."""
 
 from __future__ import annotations

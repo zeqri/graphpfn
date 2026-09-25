@@ -1,3 +1,7 @@
+# Modified for MolPFN (2026) from GraphPFN.
+# Changes: Add configurable checks on the realized training fraction.
+# See paper/LICENSE and paper/NOTICE at the repository root.
+
 import torch
 
 from lib.util import TaskType

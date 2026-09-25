@@ -1,3 +1,7 @@
+# Modified for MolPFN (2026) from GraphPFN.
+# Changes: Export graph-level label generation via virtual readout nodes.
+# See paper/LICENSE and paper/NOTICE at the repository root.
+
 """Building blocks for attribute generation in prior datasets."""
 
 from .activations import (

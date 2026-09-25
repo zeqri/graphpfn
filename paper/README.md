@@ -1,60 +1,26 @@
-# GraphPFN
+# MolPFN research code
 
-Here we provide the official implementation for reproducing experiments from the "GraphPFN: A Prior-Data Fitted Graph Foundation Model" ICML 2026 paper ([arXiv](https://arxiv.org/abs/2509.21489)), including pretraining and evaluation. See also the HuggingFace [page](https://huggingface.co/eremeev-d/graphpfn-1.3) for model weights and the `graphpfn` [package](../README.md) for a convenient Python interface.
+This directory contains the MolPFN training and evaluation pipeline and code adapted from [GraphPFN](https://github.com/yandex-research/graphpfn), the implementation accompanying "GraphPFN: A Prior-Data Fitted Graph Foundation Model" ([paper](https://arxiv.org/abs/2509.21489)). This README has been modified for the MolPFN release.
+
+For MolPFN setup and usage, see the root README:
+
+- [Setup](../README.md#setup)
+- [Train the pooler](../README.md#1-train-the-pooler)
+- [Evaluate](../README.md#2-evaluate)
+
+The original GraphPFN experiment configurations in `exp/` have been removed from this release. To reproduce those experiments, use the [upstream GraphPFN repository](https://github.com/yandex-research/graphpfn). MolPFN builds its synthetic prior from [`dev_prior_final/prior_config.py`](dev_prior_final/prior_config.py); its training and evaluation commands are documented in the root README.
+
+## Project Structure
+
+- `dev_prior_final/` - MolPFN training, synthetic prior configuration, and evaluation scripts
+- `bin/` - Retained GraphPFN training and evaluation scripts; their original experiment configurations are omitted
+- `lib/` - GraphPFN prior, model code, and utilities, including MolPFN additions and modifications
+- `vendor/` - Vendored third-party code
 
 ## Licenses
+
+Original GraphPFN license and attribution notices are retained in [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). See also the [root license documentation](../README.md#licenses).
 
 - This project uses third-party components [LimiX](https://github.com/limix-ldm/LimiX), [TabICL](https://github.com/soda-inria/tabicl) and [TabPFN](https://github.com/PriorLabs/TabPFN). See the `NOTICE` file and `LICENSES/` directory for details.
 - GraphPFN prior in `lib/graphpfn/prior` is largely based on the [TabICLv1](https://github.com/soda-inria/tabicl) prior.
 - LimiX serves as the backbone for GraphPFN, and its weights have a separate license – see the LimiX [repository](https://github.com/limix-ldm/LimiX).
-
-## Reproducing Experiments
-
-**Prerequisites**
-
-1. [Install uv](https://github.com/astral-sh/uv?tab=readme-ov-file#installation)
-2. Install dependencies
-```
-uv sync
-```
-3. For experiments on [GraphLand](https://github.com/yandex-research/graphland), download datasets and place them in the `data` directory
-
-**Running the evaluation**
-
-You can execute a minimal evaluation run (GraphPFN finetuning with 10 ensemble members) with the following command:
-
-```
-uv run bin/go.py exp/graphpfn/eval/main/finetune/10/tolokers-2/tuning.toml --force
-```
-
-**Running the pretraining**
-
-To run GraphPFN pretraining you can use the following command:
-
-```
-DGLBACKEND=pytorch uv run -m torch.distributed.run --nproc-per-node 8 bin/go.py exp/graphpfn/pretrain/main/pretrain.toml
-```
-
-## Project Structure
-
-- `bin/` - Training and evaluation scripts
-- `exp/` - Experiment configurations and results
-- `data/` - Dataset directory
-- `lib/` - Common utilities and tools
-- `vendor/` – Vendored third-party code with minor import modifications for compatibility
-
-## Configuration
-
-Experiments are configured using TOML files located in the `exp/` directory. Each configuration specifies:
-- Dataset path and preprocessing
-- Model hyperparameters
-- Training settings
-- Evaluation metrics
-
-## Results
-
-Evaluation results are saved in the same directory as the configuration file:
-- `report.json` – Evaluation metrics
-- Model checkpoints
-- Training logs
-

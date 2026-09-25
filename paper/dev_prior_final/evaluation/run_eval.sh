@@ -1,53 +1,44 @@
 #!/bin/bash
-#SBATCH --job-name=graphpfn-limix-model-uncertainty
-#SBATCH --account=atmlaml
-#SBATCH --partition=booster
-#SBATCH --time=6:00:00
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=24
-#SBATCH --array=0-17
-#SBATCH --output=%x_%A_%a.out
-#SBATCH --error=%x_%A_%a.err
-
 # --limix-seed sweep (model uncertainty) over every evaluation script in this directory, for both
-# embedding models. One SLURM array task = one (embedding model, dataset) pair on one GPU; all SEEDS
-# for that pair run sequentially. Same fixed --seed / --n-ensemble / --max-train / --test-chunk-size
-# per dataset as the earlier uncertainty sweeps.
+# embedding models. Everything runs sequentially on one GPU: for each embedding model, each dataset,
+# each seed. Same fixed --seed / --n-ensemble / --max-train per dataset as the
+# earlier uncertainty sweeps.
 #
-# Submit FROM THIS DIRECTORY (sbatch runs a copy of this file, so the submit dir is used to find the
-# scripts). No paths are baked in -- pass them through the environment:
+# No paths are baked in -- pass them through the environment:
 #   POOLER_CHECKPOINT  pooler checkpoint (.pt) to evaluate                        [required]
+#   EMBEDDING_MODELS   space-separated models (default: "Molbert MolDeBERTa")      [optional]
+#   DATASETS           space-separated datasets (default: all nine, see below)     [optional]
+#   SEEDS              space-separated --limix-seed values (default: "1 2 3 4 5")  [optional]
+#   OUTPUT_ROOT        results root (default: outputs)                             [optional]
+#   OVERWRITE=1        re-run seeds whose JSON already exists                       [optional]
 #   MOLECULENET_ROOT   override the MoleculeNet root (default <repo>/datasets/moleculenet)   [optional]
 #   ZINC_ROOT          override the ZINC root        (default <repo>/datasets/zinc)          [optional]
 #   AQSOL_ROOT         override the AQSOL root       (default <repo>/datasets/aqsol)         [optional]
 #   VENV               virtualenv to activate                                      [optional]
 # Datasets (<repo>/datasets), the backbone (<paper>/checkpoints/LimiX-16M.ckpt) and embeddings
 # (<repo>/embeddings/<model>/<dataset>) default to paths relative to the scripts.
-# Results: outputs/<model>/<dataset>/eval.limixseed<seed>.json
+# Results: ${OUTPUT_ROOT}/<model>/<dataset>/eval.limixseed<seed>.json
 #
-# Array index -> (model, dataset): 0-8 = Molbert x DATASETS, 9-17 = MolDeBERTa x DATASETS, with
-# DATASETS = esol freesolv lipo bace bbbp clintox sider zinc aqsol.
-#
-#   POOLER_CHECKPOINT=... VENV=... sbatch runs.sh
-#   POOLER_CHECKPOINT=... VENV=... sbatch --array=7,8,16,17 runs.sh     # zinc + aqsol
-#   POOLER_CHECKPOINT=... SLURM_ARRAY_TASK_ID=0 bash runs.sh            # interactive
+#   POOLER_CHECKPOINT=... bash run_eval.sh
+#   POOLER_CHECKPOINT=... DATASETS="zinc aqsol" bash run_eval.sh     # zinc + aqsol
 set -euo pipefail
 
 : "${POOLER_CHECKPOINT:?set POOLER_CHECKPOINT}"
-: "${SLURM_ARRAY_TASK_ID:?set SLURM_ARRAY_TASK_ID (0-17)}"
+# Resolved before the cd below, so a path relative to the caller's directory still works.
+POOLER_CHECKPOINT=$(realpath "${POOLER_CHECKPOINT}")
 
-module load Stages/2025 GCCcore/.13.3.0 Python/3.12.3
 if [[ -n "${VENV:-}" ]]; then
     source "${VENV}/bin/activate"
 fi
 
-cd "${SLURM_SUBMIT_DIR:-$(dirname "${BASH_SOURCE[0]}")}"
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
-EMBEDDING_MODELS=(Molbert MolDeBERTa)
-DATASETS=(esol freesolv lipo bace bbbp clintox sider zinc aqsol)
-SEEDS=(1 2 3 4 5)
+OUTPUT_ROOT=${OUTPUT_ROOT:-outputs}
+OVERWRITE=${OVERWRITE:-0}
+
+read -r -a EMBEDDING_MODELS <<< "${EMBEDDING_MODELS:-Molbert MolDeBERTa}"
+read -r -a DATASETS <<< "${DATASETS:-esol freesolv lipo bace bbbp clintox sider zinc aqsol}"
+read -r -a SEEDS <<< "${SEEDS:-1 2 3 4 5}"
 
 declare -A CMDS
 CMDS[esol]="eval_moleculenet_regression.py --dataset esol --seed 0 --n-ensemble 1"
@@ -58,28 +49,35 @@ CMDS[bbbp]="eval_bbbp.py"
 CMDS[clintox]="eval_clintox.py"
 CMDS[sider]="eval_sider.py --tasks all"
 CMDS[zinc]="eval_zinc.py --max-train 2000 --n-ensemble 10 --seed 0"
-CMDS[aqsol]="eval_aqsol.py --max-train 2000 --n-ensemble 10 --seed 0 --test-chunk-size 500"
+CMDS[aqsol]="eval_aqsol.py --max-train 2000 --n-ensemble 10 --seed 0"
 
-emb=${EMBEDDING_MODELS[$((SLURM_ARRAY_TASK_ID / ${#DATASETS[@]}))]}
-ds=${DATASETS[$((SLURM_ARRAY_TASK_ID % ${#DATASETS[@]}))]}
+for emb in "${EMBEDDING_MODELS[@]}"; do
+    for ds in "${DATASETS[@]}"; do
+        # Dataset root overrides (only passed when set; otherwise the scripts use <repo>/datasets/...).
+        ROOT_ARGS=()
+        case "${ds}" in
+            zinc)  [[ -n "${ZINC_ROOT:-}" ]] && ROOT_ARGS=(--zinc-root "${ZINC_ROOT}") ;;
+            aqsol) [[ -n "${AQSOL_ROOT:-}" ]] && ROOT_ARGS=(--aqsol-root "${AQSOL_ROOT}") ;;
+            *)     [[ -n "${MOLECULENET_ROOT:-}" ]] && ROOT_ARGS=(--moleculenet-root "${MOLECULENET_ROOT}") ;;
+        esac
 
-# Dataset root overrides (only passed when set; otherwise the scripts use <repo>/datasets/...).
-ROOT_ARGS=()
-case "${ds}" in
-    zinc)  [[ -n "${ZINC_ROOT:-}" ]] && ROOT_ARGS=(--zinc-root "${ZINC_ROOT}") ;;
-    aqsol) [[ -n "${AQSOL_ROOT:-}" ]] && ROOT_ARGS=(--aqsol-root "${AQSOL_ROOT}") ;;
-    *)     [[ -n "${MOLECULENET_ROOT:-}" ]] && ROOT_ARGS=(--moleculenet-root "${MOLECULENET_ROOT}") ;;
-esac
+        out_dir="${OUTPUT_ROOT}/${emb}/${ds}"
+        mkdir -p "${out_dir}"
 
-mkdir -p "outputs/${emb}/${ds}"
-
-for limix_seed in "${SEEDS[@]}"; do
-    echo "[task ${SLURM_ARRAY_TASK_ID}] embedding=${emb} dataset=${ds} limix-seed=${limix_seed}"
-    python ${CMDS[$ds]} \
-        --device cuda \
-        "${ROOT_ARGS[@]}" \
-        --pooler-checkpoint "${POOLER_CHECKPOINT}" \
-        --embedding-model "${emb}" \
-        --limix-seed "${limix_seed}" \
-        --output-json "outputs/${emb}/${ds}/eval.limixseed${limix_seed}.json"
+        for limix_seed in "${SEEDS[@]}"; do
+            out_json="${out_dir}/eval.limixseed${limix_seed}.json"
+            if [[ -f "${out_json}" && "${OVERWRITE}" != 1 ]]; then
+                echo "${out_json} exists, skipping (OVERWRITE=1 to re-run)"
+                continue
+            fi
+            echo "embedding=${emb} dataset=${ds} limix-seed=${limix_seed}"
+            python ${CMDS[$ds]} \
+                --device cuda \
+                "${ROOT_ARGS[@]}" \
+                --pooler-checkpoint "${POOLER_CHECKPOINT}" \
+                --embedding-model "${emb}" \
+                --limix-seed "${limix_seed}" \
+                --output-json "${out_json}"
+        done
+    done
 done

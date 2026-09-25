@@ -1,3 +1,7 @@
+# Modified for MolPFN (2026) from GraphPFN.
+# Changes: Add optional cause masking for virtual readout nodes.
+# See paper/LICENSE and paper/NOTICE at the repository root.
+
 """GNN-based Structural Causal Model for graph-aware attribute generation."""
 
 from __future__ import annotations

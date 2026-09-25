@@ -1,3 +1,7 @@
+# Modified for MolPFN (2026) from GraphPFN.
+# Changes: Extend configuration types for molecule priors, geometry and split checks.
+# See paper/LICENSE and paper/NOTICE at the repository root.
+
 from __future__ import annotations
 
 from collections.abc import Mapping

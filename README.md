@@ -38,7 +38,6 @@ pip install torch-geometric rdkit huggingface_hub numpy scipy scikit-learn panda
     rtdl_num_embeddings rtdl_revisiting_models optuna kditransform ogb
 ```
 
-On JUWELS, load Python first with `ml Stages/2025 GCCcore/.13.3.0 Python/3.12.3`. Load it again in every new shell and job script before you activate the environment.
 
 **2. Download the LimiX-16M backbone** to `paper/checkpoints/LimiX-16M.ckpt`:
 
@@ -170,6 +169,18 @@ Each optimizer step averages gradients over 20 synthetic datasets per GPU. A sin
 
 ## 2. Evaluate
 
+Each evaluation script evaluates both **MolPFN** and a plain **LimiX** baseline in one run, on the same molecules, splits and labels:
+
+| Pipeline (output key) | Model | Input |
+|---|---|---|
+| `baseline_x_plus_extra_features` | MolPFN | Molecule graph; atom features = 9 MoleculeNet columns + 31 RDKit columns |
+| `x_plus_extra_features_molebert_augmented` | MolPFN | Same, plus the pretrained molecule embedding as one more LimiX feature group |
+| `baseline_extra_features_only` | MolPFN | Molecule graph; atom features = the 31 RDKit columns only (MoleculeNet datasets only) |
+| `extra_features_only_molebert_augmented` | MolPFN | Same, plus the pretrained molecule embedding (MoleculeNet datasets only) |
+| `molebert_limix` | LimiX | The pretrained molecule embedding as plain tabular features, with no pooler and no graph |
+
+The MolPFN pipelines pass each molecule through the trained pooler into the frozen LimiX backbone. The LimiX pipeline gives the same frozen backbone only the embeddings. ZINC and AQSOL run the first two MolPFN pipelines and the LimiX pipeline. The output keys are named `molebert_*` for both embedding models; the model actually used is recorded under `embedding_model` in the output JSON. `--skip-embedding-limix` skips the LimiX pipeline, and `--skip-embeddings` skips every pipeline that uses embeddings.
+
 Each evaluation script runs on one GPU and finds the datasets, embeddings and LimiX backbone through paths relative to the script, so it can be launched from any directory. The only required inputs are the pooler checkpoint and the embedding model.
 
 ```bash
@@ -181,7 +192,7 @@ python eval_moleculenet_regression.py --dataset esol     --pooler-checkpoint $CK
 python eval_moleculenet_regression.py --dataset freesolv --pooler-checkpoint $CKPT --embedding-model Molbert --n-ensemble 1
 python eval_moleculenet_regression.py --dataset lipo     --pooler-checkpoint $CKPT --embedding-model Molbert --n-ensemble 10 --max-train 2000
 python eval_zinc.py  --pooler-checkpoint $CKPT --embedding-model Molbert --max-train 2000 --n-ensemble 10
-python eval_aqsol.py --pooler-checkpoint $CKPT --embedding-model Molbert --max-train 2000 --n-ensemble 10 --test-chunk-size 500
+python eval_aqsol.py --pooler-checkpoint $CKPT --embedding-model Molbert --max-train 2000 --n-ensemble 10
 
 # Classification
 python eval_bace.py    --pooler-checkpoint $CKPT --embedding-model Molbert
@@ -208,28 +219,72 @@ Replace `Molbert` with `MolDeBERTa` to use the other embeddings.
 | `--output-json` | `outputs/<model>/<name>.json` | Where to write metrics |
 | `--device` | `cuda` if available | Device |
 
-### Full sweep on SLURM
+### Full sweep
 
-[`paper/dev_prior_final/evaluation/run_eval.sh`](paper/dev_prior_final/evaluation/run_eval.sh) runs every dataset with both embedding models and LimiX seeds 1–5, as an 18-task array (tasks 0–8 use Molbert, 9–17 use MolDeBERTa). Submit it from the evaluation directory:
+[`paper/dev_prior_final/evaluation/run_eval.sh`](paper/dev_prior_final/evaluation/run_eval.sh) runs every dataset with both embedding models and LimiX seeds 1–5, sequentially on one GPU. Set `VENV` to activate a virtualenv first:
 
 ```bash
-cd paper/dev_prior_final/evaluation
-POOLER_CHECKPOINT=$(realpath ../../../checkpoints/pooler_checkpoint_best.pt) \
-VENV=/path/to/venv \
-sbatch --account=<your-account> run_eval.sh
+POOLER_CHECKPOINT=checkpoints/pooler_checkpoint_best.pt \
+bash paper/dev_prior_final/evaluation/run_eval.sh
 
 # only ZINC and AQSOL
-POOLER_CHECKPOINT=... VENV=... sbatch --array=7,8,16,17 run_eval.sh
-
-# one task interactively
-POOLER_CHECKPOINT=... SLURM_ARRAY_TASK_ID=0 bash run_eval.sh
+POOLER_CHECKPOINT=checkpoints/pooler_checkpoint_best.pt DATASETS="zinc aqsol" \
+bash paper/dev_prior_final/evaluation/run_eval.sh
 ```
 
-Results are written to `outputs/<model>/<dataset>/eval.limixseed<seed>.json`.
+`EMBEDDING_MODELS` and `SEEDS` narrow the sweep the same way. Seeds whose result already exists are skipped unless `OVERWRITE=1` is set. Results are written to `paper/dev_prior_final/evaluation/outputs/<model>/<dataset>/eval.limixseed<seed>.json`.
 
-## 3. TabPFN v3 baseline
+## 3. TabICL baseline
 
-[`paper/dev_prior_final/evaluation/TabPFNv3/eval_tabpfnv3.py`](paper/dev_prior_final/evaluation/TabPFNv3/eval_tabpfnv3.py) is an embeddings-only baseline: the Molbert or MolDeBERTa embeddings (from [Setup](#setup) step 7) are used as plain tabular features for TabPFN v3 in-context learning, with no pooler and no graphs. It uses the same datasets, splits, labels, protocol and metrics as the TabICL baseline in [`evaluation/TabICL/`](paper/dev_prior_final/evaluation/TabICL/).
+[`paper/dev_prior_final/evaluation/TabICL/eval_tabicl.py`](paper/dev_prior_final/evaluation/TabICL/eval_tabicl.py) is an embeddings-only baseline: the Molbert or MolDeBERTa embeddings (from [Setup](#setup) step 7) are used as plain tabular features for TabICL in-context learning, with no pooler and no graphs. It is the TabICL counterpart of the LimiX pipeline (`molebert_limix`) in the evaluation scripts, and uses the same molecules, splits, labels, context sizes and metrics.
+
+It runs in the MolPFN environment. The TabICL code is included in [`paper/vendor/tabicl`](paper/vendor/tabicl); its weights are not.
+
+**1. Download the TabICL v2 checkpoints** to `paper/checkpoints/tabicl/`, from the repository root:
+
+```bash
+python -c "from huggingface_hub import hf_hub_download as d; [d('jingang/TabICL', f, local_dir='paper/checkpoints/tabicl') for f in ('tabicl-classifier-v2-20260212.ckpt', 'tabicl-regressor-v2-20260212.ckpt')]"
+```
+
+If a checkpoint is missing when you run the script, TabICL downloads it to that folder on first use. To keep the checkpoints somewhere else, pass `--checkpoint-dir DIR`.
+
+**2. Run it:**
+
+```bash
+cd paper/dev_prior_final/evaluation/TabICL
+
+# Classification
+python eval_tabicl.py --dataset bace    --embedding-model Molbert
+python eval_tabicl.py --dataset bbbp    --embedding-model Molbert
+python eval_tabicl.py --dataset clintox --embedding-model Molbert
+python eval_tabicl.py --dataset sider   --embedding-model Molbert --tasks all
+
+# Regression (per-dataset defaults for --max-train / --n-ensemble match the MolPFN evaluation)
+python eval_tabicl.py --dataset esol     --embedding-model Molbert
+python eval_tabicl.py --dataset freesolv --embedding-model Molbert
+python eval_tabicl.py --dataset lipo     --embedding-model Molbert
+python eval_tabicl.py --dataset zinc     --embedding-model Molbert
+python eval_tabicl.py --dataset aqsol    --embedding-model Molbert
+```
+
+Replace `Molbert` with `MolDeBERTa` to use the other embeddings. Use `--tabicl-seed` to set TabICL's `random_state` (default 0) and `--n-estimators` for its ensemble size (default 8). Results are written to `paper/dev_prior_final/evaluation/TabICL/outputs/<model>/tabicl_<dataset>.json` unless `--output-json` is given.
+
+**Full sweep.** [`run_eval_tabicl.sh`](paper/dev_prior_final/evaluation/TabICL/run_eval_tabicl.sh) runs every dataset with both embedding models and `--tabicl-seed` 1–5, sequentially on one GPU. It checks that both checkpoints exist before it starts; set `TABICL_CHECKPOINT_DIR` if they are not in `paper/checkpoints/tabicl/`, and `VENV` to activate a virtualenv first:
+
+```bash
+bash paper/dev_prior_final/evaluation/TabICL/run_eval_tabicl.sh
+
+# only ZINC and AQSOL
+DATASETS="zinc aqsol" bash paper/dev_prior_final/evaluation/TabICL/run_eval_tabicl.sh
+```
+
+`EMBEDDING_MODELS` and `SEEDS` narrow the sweep the same way.
+
+Results are written to `outputs/<model>/<dataset>/tabicl.seed<seed>.json`.
+
+## 4. TabPFN v3 baseline
+
+[`paper/dev_prior_final/evaluation/TabPFNv3/eval_tabpfnv3.py`](paper/dev_prior_final/evaluation/TabPFNv3/eval_tabpfnv3.py) is an embeddings-only baseline: the Molbert or MolDeBERTa embeddings (from [Setup](#setup) step 7) are used as plain tabular features for TabPFN v3 in-context learning, with no pooler and no graphs. It uses the same datasets, splits, labels, protocol and metrics as the [TabICL baseline](#3-tabicl-baseline).
 
 Neither the TabPFN code nor its weights are included in this repository. Both are covered by the [Prior Labs license](https://github.com/PriorLabs/TabPFN), which you must accept yourself.
 
@@ -241,12 +296,7 @@ source tabpfn_env/bin/activate
 pip install "tabpfn==<VERSION>" numpy scikit-learn
 ```
 
-**2. Get the TabPFN v3 checkpoints** (`tabpfn-v3-classifier-v3_default.ckpt` and `tabpfn-v3-regressor-v3_default.ckpt`) from the gated Hugging Face repository `Prior-Labs/tabpfn_3`. You can do this in either of two ways:
-
-- Set `TABPFN_MODEL_CACHE_DIR`. If the checkpoints are not there, `tabpfn` downloads them on first use. This needs a one-time license acceptance (browser login; the token is stored under `~/.cache/tabpfn`).
-- Put both files in one directory and pass `--checkpoint-dir DIR`.
-
-On HPC clusters, set `TABPFN_MODEL_CACHE_DIR` outside `$HOME`. The skrub and matplotlib data directories are then placed next to it.
+**2. Get the TabPFN v3 checkpoints** (`tabpfn-v3-classifier-v3_default.ckpt` and `tabpfn-v3-regressor-v3_default.ckpt`) from the gated Hugging Face repository `Prior-Labs/tabpfn_3`. The script reads them from `paper/checkpoints/tabpfnv3/`. If they are not there, `tabpfn` downloads them to that folder the first time you run the script. The first download needs a one-time license acceptance (browser login; the token is stored under `~/.cache/tabpfn`). To keep the checkpoints somewhere else, pass `--checkpoint-dir DIR`.
 
 **3. Run it:**
 
@@ -269,6 +319,35 @@ python eval_tabpfnv3.py --dataset aqsol    --embedding-model Molbert
 
 Replace `Molbert` with `MolDeBERTa` to use the other embeddings. Use `--tabpfn-seed` to set TabPFN's `random_state` (default 0). `--n-estimators` defaults to 8, not v3's `"auto"`, to match TabICL. Results are written to `paper/dev_prior_final/evaluation/TabPFNv3/outputs/<model>/tabpfnv3_<dataset>.json` unless `--output-json` is given.
 
+**Full sweep.** [`run_eval_tabpfnv3.sh`](paper/dev_prior_final/evaluation/TabPFNv3/run_eval_tabpfnv3.sh) runs every dataset with both embedding models and `--tabpfn-seed` 1–5, sequentially on one GPU. Set `TABPFN_CHECKPOINT_DIR` if the checkpoints are not in `paper/checkpoints/tabpfnv3/`, and `VENV` to activate the TabPFN environment first:
+
+```bash
+bash paper/dev_prior_final/evaluation/TabPFNv3/run_eval_tabpfnv3.sh
+
+# only ZINC and AQSOL
+DATASETS="zinc aqsol" bash paper/dev_prior_final/evaluation/TabPFNv3/run_eval_tabpfnv3.sh
+```
+
+`EMBEDDING_MODELS` and `SEEDS` narrow the sweep the same way. Results are written to `outputs/<model>/<dataset>/tabpfnv3.seed<seed>.json`.
+
+## 5. KNN baseline
+
+[`paper/dev_prior_final/evaluation/KNN/eval_knn.py`](paper/dev_prior_final/evaluation/KNN/eval_knn.py) is an embeddings-only k-nearest-neighbours baseline: the Molbert or MolDeBERTa embeddings (from [Setup](#setup) step 7) are used as plain tabular features for scikit-learn's `KNeighborsClassifier` / `KNeighborsRegressor`, with no pooler and no graphs. It uses the same molecules, splits and labels as the [TabICL baseline](#3-tabicl-baseline), and runs on the CPU in the MolPFN environment.
+
+The features are standardized on the train split. For each task, every combination of distance (`euclidean`, `cosine`) and `k` (1, 3, 5, 7, 9, 11, 15, 21, 31, 51) is fit on train and scored on valid. The combination with the best valid score is selected and its test metrics are reported. By default the valid score is ROC-AUC for classification, RMSE for ESOL, FreeSolv and Lipo, and MAE for ZINC and AQSOL.
+
+Run all nine datasets with both embedding models:
+
+```bash
+cd paper/dev_prior_final/evaluation/KNN
+
+for m in Molbert MolDeBERTa; do
+    python eval_knn.py --dataset all --embedding-model $m
+done
+```
+
+Use `--dataset` with one or more dataset names to run a subset, `--select-by` to change the selection metric, `--k-grid` and `--distances` to change the search grid, and `--weights distance` for distance-weighted neighbours. Results are written to `paper/dev_prior_final/evaluation/KNN/outputs/<model>/knn_<dataset>.json` unless `--output-json` is given.
+
 ## Repository layout
 
 ```
@@ -278,13 +357,13 @@ Replace `Molbert` with `MolDeBERTa` to use the other embeddings. Use `--tabpfn-s
 ├── embeddings/                # Molbert / MolDeBERTa embeddings (generated)
 │   └── checkpoints/           # Mole-BERT / MolDeBERTa models (downloaded)
 └── paper/
-    ├── checkpoints/           # LimiX-16M.ckpt (downloaded)
+    ├── checkpoints/           # LimiX-16M.ckpt, tabicl/, tabpfnv3/ (downloaded)
     ├── embedding/             # scripts that generate embeddings/
     ├── dev_prior_final/       # MolPFN
     │   ├── train_pooler.py    # pooler training on the synthetic molecule prior
     │   ├── prior_config.py    # base synthetic-molecule prior
     │   ├── train.sh           # example SLURM training job
-    │   └── evaluation/        # per-dataset evaluation scripts + run_eval.sh
+    │   └── evaluation/        # per-dataset evaluation scripts + run_eval.sh; TabICL/, TabPFNv3/ and KNN/ baselines
     ├── lib/                   # GraphPFN prior and model code (reused, with modifications)
     └── vendor/                # vendored LimiX, TabICL and TabPFN code
 ```

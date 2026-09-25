@@ -1,3 +1,8 @@
+# Adapted for MolPFN (2026) from GraphPFN prior dataset sampling
+# in prior/priors/graph_then_attributes.py.
+# Changes: generate graph-level labels and split at molecule granularity.
+# See paper/LICENSE and paper/NOTICE at the repository root.
+
 """Graph-level ("whole-molecule") prior dataset sampling.
 
 Thin composition helper mirroring `priors/graph_then_attributes.py`'s

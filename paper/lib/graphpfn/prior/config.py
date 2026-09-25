@@ -1,3 +1,7 @@
+# Modified for MolPFN (2026) from GraphPFN.
+# Changes: Add recursive configuration resampling for individual subgraphs.
+# See paper/LICENSE and paper/NOTICE at the repository root.
+
 import math
 from typing import cast
 

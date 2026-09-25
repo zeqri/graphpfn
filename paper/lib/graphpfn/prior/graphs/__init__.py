@@ -1,3 +1,7 @@
+# Modified for MolPFN (2026) from GraphPFN.
+# Changes: Integrate multi-graph, tree-with-rings and molecule-skeleton samplers.
+# See paper/LICENSE and paper/NOTICE at the repository root.
+
 """Graph sampling building blocks."""
 
 from ..prior_typings import GraphConfig, unpack

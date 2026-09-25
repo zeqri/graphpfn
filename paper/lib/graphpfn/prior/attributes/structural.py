@@ -1,3 +1,7 @@
+# Modified for MolPFN (2026) from GraphPFN.
+# Changes: Add optional mean incident-edge distance features.
+# See paper/LICENSE and paper/NOTICE at the repository root.
+
 """Structural feature computation from graph topology."""
 
 from __future__ import annotations

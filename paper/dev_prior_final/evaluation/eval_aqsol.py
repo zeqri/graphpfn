@@ -25,7 +25,7 @@ Pipelines 1-2 use common.run_regression_ensemble (--n-ensemble context resamples
 Usage:
     python eval_aqsol.py \\
         --aqsol-root DIR --pooler-checkpoint PATH --embedding-model {Molbert,MolDeBERTa} \\
-        [--max-train 2000] [--n-ensemble 10] [--seed 0] [--test-chunk-size 500] [--limix-seed S] \\
+        [--max-train 2000] [--n-ensemble 10] [--seed 0] [--limix-seed S] \\
         [--smiles-csv PATH] [--features-cache PATH] [--output-json PATH]
 """
 

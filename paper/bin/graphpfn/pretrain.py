@@ -1,3 +1,7 @@
+# Modified for MolPFN (2026) from GraphPFN.
+# Changes: Support released checkpoint formats and write JSONL training logs.
+# See paper/LICENSE and paper/NOTICE at the repository root.
+
 import json
 import math
 import warnings

@@ -823,10 +823,15 @@ def main() -> None:
         print(f"Run output dir: {run_output_dir}")
 
     # Real-ZINC held-out eval data -- loaded on every rank (cheap, disk-cached), but only rank 0
-    # ever calls evaluate_held_out.
+    # ever calls evaluate_held_out. Rank 0 loads first so that a missing dataset is downloaded
+    # once; torch_geometric's download is not safe to run concurrently from several processes.
     print(f"Loading real ZINC (12k subset) train/val splits from {args.zinc_root}...") if is_main else None
+    if not is_main:
+        lib.barrier()
     zinc_train_ds = ZINC(root=str(args.zinc_root), subset=True, split="train")
     zinc_val_ds = ZINC(root=str(args.zinc_root), subset=True, split="val")
+    if is_main:
+        lib.barrier()
     zinc_train_pool = _build_zinc_pool(zinc_train_ds)
     zinc_val_pool = _build_zinc_pool(zinc_val_ds)
     zinc_y_mean, zinc_y_std = _compute_global_target_stats(zinc_train_ds, zinc_train_pool)

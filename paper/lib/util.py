@@ -1,3 +1,7 @@
+# Modified for MolPFN (2026) from GraphPFN.
+# Changes: Bind DDP workers to GPUs and tolerate unavailable Git revision metadata.
+# See paper/LICENSE and paper/NOTICE at the repository root.
+
 import argparse
 import datetime
 import enum
